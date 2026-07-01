@@ -1,9 +1,7 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { ChevronLeft, ChevronRight, Star } from "lucide-react";
-import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Testimonial = {
   id: number;
@@ -44,20 +42,39 @@ const TESTIMONIALS: Testimonial[] = [
     text: "Excellent customer service, punctual, and clean minibuses. Will recommend.",
     rating: 5,
   },
+  {
+    id: 5,
+    name: "Sophie",
+    location: "Croydon",
+    text: "Booked for an airport transfer and everything ran exactly on time. Clear updates and a spotless minibus.",
+    rating: 5,
+  },
+  {
+    id: 6,
+    name: "Daniel",
+    location: "Camden",
+    text: "Our corporate group had a smooth journey across London. The driver was calm, helpful, and professional.",
+    rating: 5,
+  },
+  {
+    id: 7,
+    name: "Priya",
+    location: "Ilford",
+    text: "Easy booking, fair pricing, and plenty of room for bags. I would happily use them for family trips again.",
+    rating: 5,
+  },
+  {
+    id: 8,
+    name: "George",
+    location: "Wembley",
+    text: "Reliable service for our event pickup. The team handled timing changes without any fuss.",
+    rating: 5,
+  },
 ];
 
 export default function Customer() {
   const [active, setActive] = useState<number>(0);
-  const [prevActive, setPrevActive] = useState<number | null>(null);
-
-  const [direction, setDirection] = useState<"left" | "right">("right"); // slide direction
   const animatingRef = useRef(false);
-
-  const getAvatarUrl = (name: string) => {
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(
-      name,
-    )}&background=0D47A1&color=ffffff&size=256&bold=true`;
-  };
 
   // helper: go to next/prev with wrap
   // const next = () => {
@@ -70,19 +87,15 @@ export default function Customer() {
   //   setDirection("left");
   //   setActive((s) => (s - 1 + TESTIMONIALS.length) % TESTIMONIALS.length);
   // };
-  const next = () => {
+  const next = useCallback(() => {
     if (animatingRef.current) return;
-    setDirection("right");
-    setPrevActive(active);
     setActive((s) => (s + 1) % TESTIMONIALS.length);
-  };
+  }, []);
 
-  const prev = () => {
+  const prev = useCallback(() => {
     if (animatingRef.current) return;
-    setDirection("left");
-    setPrevActive(active);
     setActive((s) => (s - 1 + TESTIMONIALS.length) % TESTIMONIALS.length);
-  };
+  }, []);
 
   const getVisibleAvatars = () => {
     const visible = [];
@@ -103,7 +116,7 @@ export default function Customer() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [next, prev]);
 
   // When active changes, briefly mark animating to prevent rapid double-click
   useEffect(() => {
@@ -139,8 +152,6 @@ export default function Customer() {
               key={`avatar-${active}-${i}`}
               onClick={() => {
                 const newIndex = TESTIMONIALS.findIndex((t) => t.id === r.id);
-                setPrevActive(active);
-                setDirection(newIndex > active ? "right" : "left");
                 setActive(newIndex);
               }}
               aria-label={`Show testimonial from ${r.name}`}
@@ -160,12 +171,9 @@ export default function Customer() {
                   height: isActive ? 140 : 100,
                 }}
               >
-                <img
-                  src={getAvatarUrl(r.name)}
-                  alt={r.name}
-                  className="h-full w-full rounded-full object-cover"
-                  loading="lazy"
-                />
+                <span className="bg-primary-700 flex h-full w-full items-center justify-center rounded-full text-3xl font-bold text-white">
+                  {r.name.slice(0, 1)}
+                </span>
               </div>
             </button>
           );

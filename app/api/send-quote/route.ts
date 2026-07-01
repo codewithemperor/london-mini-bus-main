@@ -9,6 +9,7 @@ export async function POST(req: Request) {
 
     const {
       email,
+      tripType = "return",
       pickupPostcode,
       dropoffPostcode,
       pickupDate,
@@ -24,6 +25,12 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+
+    const parsedTotal = Number(String(totalCost).replace(/[^\d.]/g, ""));
+    const serverTotalCost = Number.isFinite(parsedTotal)
+      ? `£${(tripType === "oneway" ? parsedTotal * 2 : parsedTotal).toFixed(2)}`
+      : totalCost;
+    const tripTypeLabel = tripType === "oneway" ? "One Way Trip" : "Return Trip";
 
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
@@ -122,6 +129,15 @@ export async function POST(req: Request) {
                 <table width="100%" cellpadding="0" cellspacing="0">
                   <tr>
                     <td style="padding: 10px 0; font-size: 14px">
+                      <strong>Trip Type:</strong>
+                    </td>
+                    <td style="padding: 10px 0; font-size: 14px; text-align: right">
+                      ${tripTypeLabel}
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td style="padding: 10px 0; font-size: 14px">
                       <strong>Pick-up:</strong>
                     </td>
                     <td style="padding: 10px 0; font-size: 14px; text-align: right">
@@ -177,7 +193,7 @@ export async function POST(req: Request) {
                       color: #0b0a4e;
                     "
                   >
-                    Total Quote Estimate: ${totalCost}
+                    Total Quote Estimate: ${serverTotalCost}
                   </p>
                 </div>
 
@@ -216,7 +232,7 @@ export async function POST(req: Request) {
             <tr>
               <td valign="middle" style="padding-right: 6px;">
                 <img
-                  src="http://www.londonminibusrental.co.uk/icons/globe.png"
+                  src="http://www.londonminibusrental.co.uk/icons/globe.webp"
                   width="16"
                   height="16"
                   alt="Website"
@@ -250,7 +266,7 @@ export async function POST(req: Request) {
             <tr>
               <td valign="middle" style="padding-right: 6px;">
                 <img
-                  src="http://www.londonminibusrental.co.uk/icons/location.png"
+                  src="http://www.londonminibusrental.co.uk/icons/location.webp"
                   width="16"
                   height="16"
                   alt="Address"
@@ -275,7 +291,7 @@ export async function POST(req: Request) {
             <tr>
               <td valign="middle" style="padding-right: 6px;">
                 <img
-                  src="http://www.londonminibusrental.co.uk/icons/phone.png"
+                  src="http://www.londonminibusrental.co.uk/icons/phone.webp"
                   width="16"
                   height="16"
                   alt="Phone"
@@ -423,6 +439,21 @@ export async function POST(req: Request) {
                 <table width="100%" cellpadding="0" cellspacing="0">
                   <tr>
                     <td style="padding: 10px 0; font-size: 14px">
+                      <strong>Trip Type:</strong>
+                    </td>
+                    <td
+                      style="
+                        padding: 10px 0;
+                        font-size: 14px;
+                        text-align: right;
+                      "
+                    >
+                      ${tripTypeLabel}
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td style="padding: 10px 0; font-size: 14px">
                       <strong>Pickup:</strong>
                     </td>
                     <td
@@ -496,7 +527,7 @@ export async function POST(req: Request) {
                       color: #0b0a4e;
                     "
                   >
-                    Total Quote: ${totalCost}
+                    Total Quote: ${serverTotalCost}
                   </p>
                 </div>
               </td>

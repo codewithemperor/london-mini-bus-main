@@ -4,10 +4,10 @@ import Image from "next/image";
 import React from "react";
 
 const clients = [
-  { src: "/services/client-1.png", alt: "Monsta logo" },
-  { src: "/services/client-2.png", alt: "Gallions logo" },
-  { src: "/services/client-3.png", alt: "Sandblast logo" },
-  { src: "/services/client-4.png", alt: "Openworks logo" },
+  { src: "/services/client-1.webp", alt: "Monsta logo" },
+  { src: "/services/client-2.webp", alt: "Gallions logo" },
+  { src: "/services/client-3.webp", alt: "Sandblast logo" },
+  { src: "/services/client-4.webp", alt: "Openworks logo" },
 ];
 
 const Clients = () => {

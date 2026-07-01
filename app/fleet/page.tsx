@@ -47,9 +47,14 @@ const Fleet = () => {
           content="https://www.londonminibusrental.co.uk/fleet"
         />
         <meta property="og:site_name" content="London Minibus Rental" />
-        {/* Uncomment and add when you have a fleet image */}
-        {/* <meta property="og:image" content="https://www.londonminibusrental.co.uk/fleet-og-image.jpg" /> */}
-        {/* <meta property="og:image:alt" content="London Minibus Rental Fleet - Various minibus sizes" /> */}
+        <meta
+          property="og:image"
+          content="https://www.londonminibusrental.co.uk/buses/bus-8.webp"
+        />
+        <meta
+          property="og:image:alt"
+          content="London Minibus Rental Fleet - Various minibus sizes"
+        />
 
         {/* Enhanced Vehicle / Fleet Structured Data */}
         <script
@@ -180,7 +185,7 @@ const Fleet = () => {
         <FadeInSection delay={200}>
           <div
             className="relative h-[650px] bg-cover bg-center"
-            style={{ backgroundImage: "url('/buses/tower-bus.png')" }}
+            style={{ backgroundImage: "url('/buses/tower-bus.webp')" }}
           >
             {/* Overlay */}
             <div className="absolute inset-0 bg-black/70"></div>

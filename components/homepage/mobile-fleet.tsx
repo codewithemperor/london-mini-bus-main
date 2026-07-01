@@ -5,12 +5,12 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 const images = [
-  "/buses/bus-1.JPG",
-  "/buses/bus-2.png",
-  "/buses/bus-3.JPG",
-  "/buses/bus-4.png",
-  "/buses/bus-5.png",
-  "/buses/bus-6.png",
+  "/buses/bus-1.webp",
+  "/buses/bus-2.webp",
+  "/buses/bus-3.webp",
+  "/buses/bus-4.webp",
+  "/buses/bus-5.webp",
+  "/buses/bus-6.webp",
 ];
 
 export default function FleetMobile() {

@@ -5,6 +5,10 @@ export function normalizePostcode(code: string) {
   return code.trim().replace(/\s+/g, " ").toUpperCase();
 }
 
+export function normalizeLocation(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
 export const isValidUKPostcode = (value: string) => {
   const postcode = value.trim().toUpperCase();
 
@@ -15,19 +19,19 @@ export const isValidUKPostcode = (value: string) => {
 };
 
 export async function calculateMileage(
-  pickUpCode: string,
-  dropOffCode: string,
+  pickupLocation: string,
+  dropoffLocation: string,
 ) {
-  if (!isValidUKPostcode(pickUpCode) || !isValidUKPostcode(dropOffCode)) {
-    throw new Error("Invalid UK postcode");
+  if (!pickupLocation.trim() || !dropoffLocation.trim()) {
+    throw new Error("Missing pickup or dropoff location");
   }
 
   const res = await fetch("/api/distance", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      pickup: normalizePostcode(pickUpCode),
-      dropoff: normalizePostcode(dropOffCode),
+      pickup: normalizeLocation(pickupLocation),
+      dropoff: normalizeLocation(dropoffLocation),
     }),
   });
 
@@ -54,7 +58,7 @@ export function calculateTimeDifference(
 
   let diffMinutes = returnMinutes - pickupMinutes;
 
-  // Overnight trip (e.g. 22:00 → 06:00)
+  // Overnight trip (e.g. 22:00 to 06:00)
   if (diffMinutes < 0) {
     diffMinutes += 24 * 60;
   }
@@ -71,19 +75,21 @@ export function calculateTimeDifference(
 }
 
 export function calculateTimeCost(hoursDecimal: number) {
+  const MINIMUM_HOURS = 4;
   const FIRST_RATE_HOURS = 4;
   const FIRST_RATE = 50;
   const EXTRA_RATE = 40;
 
-  if (hoursDecimal <= 0) {
+  if (hoursDecimal < 0) {
     return {
       total: 0,
       breakdown: [],
     };
   }
 
-  const firstHours = Math.min(hoursDecimal, FIRST_RATE_HOURS);
-  const extraHours = Math.max(hoursDecimal - FIRST_RATE_HOURS, 0);
+  const billableHours = Math.max(hoursDecimal, MINIMUM_HOURS);
+  const firstHours = Math.min(billableHours, FIRST_RATE_HOURS);
+  const extraHours = Math.max(billableHours - FIRST_RATE_HOURS, 0);
 
   const firstCost = firstHours * FIRST_RATE;
   const extraCost = extraHours * EXTRA_RATE;
@@ -92,7 +98,7 @@ export function calculateTimeCost(hoursDecimal: number) {
     total: Number((firstCost + extraCost).toFixed(2)),
     breakdown: [
       {
-        label: "First 4 hours",
+        label: "Minimum first 4 hours",
         hours: Number(firstHours.toFixed(2)),
         rate: FIRST_RATE,
         cost: Number(firstCost.toFixed(2)),

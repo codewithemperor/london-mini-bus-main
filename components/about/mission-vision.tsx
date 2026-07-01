@@ -17,7 +17,7 @@ const sections = [
     should be reliable, safe, and professional. This guides everything we do at
     London Minibus Rental. Every journey we run reflects our commitment to
     service and safety for our clients.`,
-    image: "/buses/bus-1.JPG",
+    image: "/buses/bus-1.webp",
     cta: true,
   },
   {
@@ -25,14 +25,14 @@ const sections = [
     highlight: "Mission",
     text: `To deliver safe, reliable, and comfortable transport experiences built on
     punctuality, professionalism, and care.`,
-    image: "/about/image-1.png",
+    image: "/about/image-1.webp",
   },
   {
     title: "Our Vision",
     highlight: "Vision",
     text: `To set the standard for modern and dependable transport where every ride is
     safe, reliable and satisfying.`,
-    image: "/about/image-2.png",
+    image: "/about/image-2.webp",
   },
   {
     title: "Our Promise",
@@ -41,7 +41,7 @@ const sections = [
     every journey safe and smooth. Whether you're booking transport for an
     airport transfer, school trip, event, or tour, we ensure a reliable and
     comfortable experience every time.`,
-    image: "/about/image-3.png",
+    image: "/about/image-3.webp",
     cta: true,
   },
 ];
@@ -123,7 +123,7 @@ export default function MissionVision() {
           <div className="grid grid-cols-1 gap-12 px-4 md:px-12 lg:grid-cols-7">
             <div className="relative col-span-3 hidden h-full rounded-xl shadow-md md:block">
               <Image
-                src="/about/image-4.png"
+                src="/about/image-4.webp"
                 fill
                 className="rounded-xl object-cover"
                 alt="a team putting their hands together"

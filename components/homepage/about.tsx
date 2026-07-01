@@ -4,8 +4,8 @@ import Link from "next/link";
 import React from "react";
 
 const AboutSection = () => {
-  const image1 = "/fleet/ford-1/rear.jpg";
-  const image2 = "/fleet/ford-1/interior.jpg";
+  const image1 = "/fleet/ford-1/rear.webp";
+  const image2 = "/fleet/ford-1/interior.webp";
   return (
     <section className="mt-18 flex flex-col">
       <div className="flex w-full flex-col items-center justify-center">

@@ -1,8 +1,6 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { ChevronLeft, ChevronRight, Star } from "lucide-react";
-import Image from "next/image";
 import { useState } from "react";
 
 type Testimonial = {
@@ -46,6 +44,34 @@ const TESTIMONIALS: Testimonial[] = [
     text: "Excellent customer service, punctual, and clean minibuses. Will recommend.",
     rating: 5,
   },
+  {
+    id: 5,
+    name: "Sophie",
+    location: "Croydon",
+    text: "Booked for an airport transfer and everything ran exactly on time. Clear updates and a spotless minibus.",
+    rating: 5,
+  },
+  {
+    id: 6,
+    name: "Daniel",
+    location: "Camden",
+    text: "Our corporate group had a smooth journey across London. The driver was calm, helpful, and professional.",
+    rating: 5,
+  },
+  {
+    id: 7,
+    name: "Priya",
+    location: "Ilford",
+    text: "Easy booking, fair pricing, and plenty of room for bags. I would happily use them for family trips again.",
+    rating: 5,
+  },
+  {
+    id: 8,
+    name: "George",
+    location: "Wembley",
+    text: "Reliable service for our event pickup. The team handled timing changes without any fuss.",
+    rating: 5,
+  },
 ];
 
 export default function CustomerReviewMobile() {
@@ -53,12 +79,6 @@ export default function CustomerReviewMobile() {
 
   const total = TESTIMONIALS.length;
   const review = TESTIMONIALS[index];
-
-  const getAvatarUrl = (name: string) => {
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(
-      name,
-    )}&background=0D47A1&color=ffffff&size=256&bold=true`;
-  };
 
   const next = () => setIndex((i) => Math.min(i + 1, total - 1));
 
@@ -74,12 +94,9 @@ export default function CustomerReviewMobile() {
       {/* Card */}
       <div className="relative mt-10 rounded-2xl bg-white p-6 text-center shadow-lg">
         {/* Avatar */}
-        <img
-          src={getAvatarUrl(review.name)}
-          alt={review.name}
-          className="mx-auto mb-8 h-40 w-40 rounded-full object-contain shadow-xl"
-          loading="lazy"
-        />
+        <div className="bg-primary-700 mx-auto mb-8 flex h-40 w-40 items-center justify-center rounded-full text-5xl font-bold text-white shadow-xl">
+          {review.name.slice(0, 1)}
+        </div>
 
         {/* Name */}
         <h3 className="text-primary-700 text-lg font-semibold">

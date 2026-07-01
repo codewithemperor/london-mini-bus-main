@@ -241,7 +241,7 @@ export async function POST(req: Request) {
                 >
                   <tr>
                     <td style="padding: 6px 0; font-weight: 600">
-                      Pick up postcode
+                      Pick up address/postcode
                     </td>
                     <td style="padding: 6px 0; text-align: right">
                       ${pickupPostcode}
@@ -249,7 +249,7 @@ export async function POST(req: Request) {
                   </tr>
                   <tr>
                     <td style="padding: 6px 0; font-weight: 600">
-                      Destination postcode
+                      Destination address/postcode
                     </td>
                     <td style="padding: 6px 0; text-align: right">
                       ${destinationPostcode}
@@ -483,7 +483,7 @@ export async function POST(req: Request) {
             <tr>
               <td valign="middle" style="padding-right: 6px;">
                 <img
-                  src="http://www.londonminibusrental.co.uk/icons/globe.png"
+                  src="http://www.londonminibusrental.co.uk/icons/globe.webp"
                   width="16"
                   height="16"
                   alt="Website"
@@ -517,7 +517,7 @@ export async function POST(req: Request) {
             <tr>
               <td valign="middle" style="padding-right: 6px;">
                 <img
-                  src="http://www.londonminibusrental.co.uk/icons/location.png"
+                  src="http://www.londonminibusrental.co.uk/icons/location.webp"
                   width="16"
                   height="16"
                   alt="Address"
@@ -542,7 +542,7 @@ export async function POST(req: Request) {
             <tr>
               <td valign="middle" style="padding-right: 6px;">
                 <img
-                  src="http://www.londonminibusrental.co.uk/icons/phone.png"
+                  src="http://www.londonminibusrental.co.uk/icons/phone.webp"
                   width="16"
                   height="16"
                   alt="Phone"

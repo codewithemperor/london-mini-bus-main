@@ -30,7 +30,7 @@ export default function Services() {
             {/* Image */}
             <div className="relative col-span-3 h-40 w-full overflow-hidden rounded-2xl md:h-[380px]">
               <Image
-                src="/services/airport.png"
+                src="/services/airport.webp"
                 alt="Airport Transfers"
                 fill
                 className="object-cover transition duration-500 ease-out group-hover:scale-105"
@@ -80,7 +80,7 @@ export default function Services() {
             {/* Image */}
             <div className="relative col-span-3 h-40 w-full overflow-hidden rounded-2xl md:hidden">
               <Image
-                src="/services/school.png"
+                src="/services/school.webp"
                 alt="Airport Transfers"
                 fill
                 className="object-cover transition duration-500 ease-out group-hover:scale-105"
@@ -121,7 +121,7 @@ export default function Services() {
             {/* Image */}
             <div className="relative col-span-3 hidden h-[380px] w-full overflow-hidden rounded-2xl md:block">
               <Image
-                src="/services/school.png"
+                src="/services/school.webp"
                 alt="Airport Transfers"
                 fill
                 className="object-cover transition duration-500 ease-out group-hover:scale-105"
@@ -141,7 +141,7 @@ export default function Services() {
             {/* Image */}
             <div className="relative col-span-3 h-40 w-full overflow-hidden rounded-2xl md:h-[380px]">
               <Image
-                src="/services/wedding.png"
+                src="/services/wedding.webp"
                 alt="Airport Transfers"
                 fill
                 className="object-cover transition duration-500 ease-out group-hover:scale-105"
@@ -193,7 +193,7 @@ export default function Services() {
             {/* image */}
             <div className="relative col-span-3 h-40 w-full overflow-hidden rounded-2xl md:hidden">
               <Image
-                src="/services/tour.png"
+                src="/services/tour.webp"
                 alt="Airport Transfers"
                 fill
                 className="object-cover transition duration-500 ease-out group-hover:scale-105"
@@ -248,7 +248,7 @@ export default function Services() {
             {/* Image */}
             <div className="relative col-span-2 hidden h-[380px] w-full overflow-hidden rounded-2xl md:block">
               <Image
-                src="/services/tour.png"
+                src="/services/tour.webp"
                 alt="Airport Transfers"
                 fill
                 className="object-center transition duration-500 ease-out group-hover:scale-105"

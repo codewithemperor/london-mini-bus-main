@@ -31,7 +31,7 @@ export default function FloatingWhatsApp() {
         className="animate-bounce transition hover:scale-110 focus:outline-none"
       >
         <Image
-          src="/icons/whatsapp.png"
+          src="/icons/whatsapp.webp"
           alt="WhatsApp icon"
           width={80}
           height={80}

@@ -39,7 +39,7 @@ const Buses = () => {
               {/* Image */}
               <div className="relative col-span-3 h-[380px] w-full overflow-hidden rounded-2xl">
                 <Image
-                  src="/buses/bus-7.png"
+                  src="/buses/bus-7.webp"
                   alt="Airport Transfers"
                   fill
                   className="object-cover transition duration-500 ease-out group-hover:scale-105"
@@ -112,7 +112,7 @@ const Buses = () => {
               {/* image for mobile */}
               <div className="relative col-span-3 h-[380px] w-full overflow-hidden rounded-2xl md:hidden">
                 <Image
-                  src="/buses/bus-8.png"
+                  src="/buses/bus-8.webp"
                   alt="Airport Transfers"
                   fill
                   className="object-cover transition duration-500 ease-out group-hover:scale-105"
@@ -174,7 +174,7 @@ const Buses = () => {
               {/* Image */}
               <div className="relative col-span-3 hidden h-[380px] w-full overflow-hidden rounded-2xl md:block">
                 <Image
-                  src="/buses/bus-8.png"
+                  src="/buses/bus-8.webp"
                   alt="Airport Transfers"
                   fill
                   className="object-cover transition duration-500 ease-out group-hover:scale-105"
@@ -195,7 +195,7 @@ const Buses = () => {
               {/* Image */}
               <div className="relative col-span-3 h-[380px] w-full overflow-hidden rounded-2xl">
                 <Image
-                  src="/buses/bus-9.png"
+                  src="/buses/bus-9.webp"
                   alt="Airport Transfers"
                   fill
                   className="object-cover transition duration-500 ease-out group-hover:scale-105"
@@ -269,7 +269,7 @@ const Buses = () => {
               {/* image for mobile */}
               <div className="relative col-span-3 h-[380px] w-full overflow-hidden rounded-2xl md:hidden">
                 <Image
-                  src="/buses/bus-8.png"
+                  src="/buses/bus-8.webp"
                   alt="Airport Transfers"
                   fill
                   className="object-cover transition duration-500 ease-out group-hover:scale-105"
@@ -331,7 +331,7 @@ const Buses = () => {
               {/* Image */}
               <div className="relative col-span-3 hidden h-[380px] w-full overflow-hidden rounded-2xl md:block">
                 <Image
-                  src="/buses/bus-10.png"
+                  src="/buses/bus-10.webp"
                   alt="Airport Transfers"
                   fill
                   className="object-cover transition duration-500 ease-out group-hover:scale-105"

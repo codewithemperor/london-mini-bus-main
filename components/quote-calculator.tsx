@@ -4,35 +4,91 @@ import {
   calculateMileage,
   calculateTimeCost,
   calculateTimeDifference,
-  isValidUKPostcode,
-  normalizePostcode,
+  normalizeLocation,
 } from "@/utils/quote-helpers";
-import Image from "next/image";
-import React, { useState } from "react";
-import QuoteModal from "./quote-modal";
 import { QuoteFormState } from "@/types/form";
+import {
+  Calculator,
+  Clock,
+  Info,
+  MapPin,
+  RotateCcw,
+} from "lucide-react";
+import {
+  HeroDatePickerField,
+  HeroInputField,
+  HeroNativeSelect,
+  HeroTextInput,
+} from "@/components/ui/hero-form-field";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
+import React, { useMemo, useState } from "react";
+import QuoteModal from "./quote-modal";
 import SuccessModal from "./success-modal";
-import { Calendar } from "lucide-react";
+
+type TripType = "return" | "oneway";
 
 type FormState = {
+  tripType: TripType;
   pickupTime: string;
   returnTime: string;
   pickupDate: string;
-  pickupPostcode: string;
-  dropoffPostcode: string;
+  pickupLocation: string;
+  dropoffLocation: string;
 };
 
+type RequiredFieldKey = Exclude<keyof FormState, "tripType">;
+
+const ADDRESS_SUGGESTIONS = [
+  "Heathrow Airport, Hounslow",
+  "Gatwick Airport, Horley",
+  "Stansted Airport, Stansted",
+  "Luton Airport, Luton",
+  "London City Airport, London",
+  "King's Cross Station, London",
+  "Victoria Coach Station, London",
+  "Waterloo Station, London",
+  "Wembley Stadium, London",
+  "The O2, London",
+  "SW1A 1AA",
+  "SE15 2UQ",
+  "E20 2ST",
+];
+
+const timeOptions = Array.from({ length: 24 * 4 }, (_, i) => {
+  const totalMinutes = i * 15;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const value = `${hours.toString().padStart(2, "0")}:${minutes
+    .toString()
+    .padStart(2, "0")}`;
+  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
+  const period = hours < 12 ? "AM" : "PM";
+
+  return {
+    value,
+    label: `${hour12}:${minutes.toString().padStart(2, "0")} ${period}`,
+  };
+});
+
+const formatDateForDisplay = (value: string) => {
+  if (!value) return "";
+  const [year, month, day] = value.split("-");
+  return `${day}/${month}/${year}`;
+};
+
+const money = (amount: number) => `£${amount.toFixed(2)}`;
+
 export default function QuoteCalculator() {
-  const image = "/buses/bus-1.JPG";
   const [openQuote, setOpenQuote] = useState(false);
   const [openSuccess, setOpenSuccess] = useState(false);
-  const [errors, setErrors] = useState<{
-    pickupPostcode?: string;
-    dropoffPostcode?: string;
-  }>({});
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [errors, setErrors] = useState<
+    Partial<Record<RequiredFieldKey, string>>
+  >({});
 
   const [fullData, setFullData] = useState<QuoteFormState>({
+    tripType: "return",
     pickupTime: "",
     returnTime: "",
     pickupDate: "",
@@ -42,34 +98,40 @@ export default function QuoteCalculator() {
     distanceMiles: "",
     totalDuration: "",
     totalCost: "",
+    baseTotalCost: "",
   });
+
   const [form, setForm] = useState<FormState>({
+    tripType: "return",
     pickupTime: "",
     returnTime: "",
     pickupDate: "",
-    pickupPostcode: "",
-    dropoffPostcode: "",
+    pickupLocation: "",
+    dropoffLocation: "",
   });
 
   const router = useRouter();
 
-  const handleChange = (key: keyof FormState, value: string) => {
-    setForm((s) => ({ ...s, [key]: value }));
+  const minPickupDate = useMemo(() => new Date().toISOString().split("T")[0], []);
 
-    // Clear error for that field while typing
-    if (key === "pickupPostcode" || key === "dropoffPostcode") {
+  const handleChange = (key: keyof FormState, value: string) => {
+    setForm((state) => ({ ...state, [key]: value }));
+
+    if (key !== "tripType") {
       setErrors((prev) => ({ ...prev, [key]: undefined }));
     }
   };
 
   const handleReset = () => {
     setForm({
+      tripType: "return",
       pickupTime: "",
       returnTime: "",
       pickupDate: "",
-      pickupPostcode: "",
-      dropoffPostcode: "",
+      pickupLocation: "",
+      dropoffLocation: "",
     });
+    setErrors({});
   };
 
   const sendEmail = async () => {
@@ -84,15 +146,15 @@ export default function QuoteCalculator() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: fullData.email,
+          tripType: fullData.tripType,
           pickupPostcode: fullData.pickupPostcode,
           dropoffPostcode: fullData.dropoffPostcode,
           pickupTime: fullData.pickupTime,
           returnTime: fullData.returnTime,
           pickupDate: fullData.pickupDate,
-
           distanceMiles: fullData.distanceMiles,
           duration: fullData.totalDuration,
-          totalCost: fullData.totalCost,
+          totalCost: fullData.baseTotalCost || fullData.totalCost,
         }),
       });
 
@@ -111,39 +173,40 @@ export default function QuoteCalculator() {
   const handleCalculate = async () => {
     const newErrors: typeof errors = {};
 
-    // Validate RAW input
-    if (!form.pickupPostcode.trim()) {
-      newErrors.pickupPostcode = "Pickup postcode is required";
-    } else if (!isValidUKPostcode(form.pickupPostcode)) {
-      newErrors.pickupPostcode = "Enter a valid UK postcode";
+    if (!form.pickupLocation.trim()) {
+      newErrors.pickupLocation = "Pickup address or postcode is required";
     }
 
-    if (!form.dropoffPostcode.trim()) {
-      newErrors.dropoffPostcode = "Drop-off postcode is required";
-    } else if (!isValidUKPostcode(form.dropoffPostcode)) {
-      newErrors.dropoffPostcode = "Enter a valid UK postcode";
+    if (!form.dropoffLocation.trim()) {
+      newErrors.dropoffLocation = "Drop-off address or postcode is required";
     }
 
-    if (!form.pickupTime || !form.returnTime) {
-      return;
+    if (!form.pickupDate) {
+      newErrors.pickupDate = "Pickup date is required";
     }
 
-    // Stop calculation if errors exist
+    if (!form.pickupTime) {
+      newErrors.pickupTime = "Pick up time is required";
+    }
+
+    if (!form.returnTime) {
+      newErrors.returnTime = "Return time is required";
+    }
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
     }
 
-    // Clear errors once valid
     setErrors({});
+    setIsCalculating(true);
 
-    const fromCode = normalizePostcode(form.pickupPostcode);
-    const toCode = normalizePostcode(form.dropoffPostcode);
+    const pickupLocation = normalizeLocation(form.pickupLocation);
+    const dropoffLocation = normalizeLocation(form.dropoffLocation);
 
     try {
-      const mileageResult = await calculateMileage(fromCode, toCode);
-
-      const MILE_RATE = 1.5;
+      const mileageResult = await calculateMileage(pickupLocation, dropoffLocation);
+      const MILE_RATE = 1.7;
 
       if (!mileageResult || typeof mileageResult.distanceMiles !== "number") {
         throw new Error("Invalid distance result");
@@ -152,32 +215,39 @@ export default function QuoteCalculator() {
       const mileageCost = Number(
         (mileageResult.distanceMiles * MILE_RATE).toFixed(2),
       );
-
       const timeResult = calculateTimeDifference(
         form.pickupTime,
         form.returnTime,
       );
+      const billableHours = Math.max(timeResult.hoursDecimal, 4);
       const timeCost = calculateTimeCost(timeResult.hoursDecimal);
-
-      const totalCost = Number((mileageCost + timeCost.total).toFixed(2));
+      const baseTotalCost = Number((mileageCost + timeCost.total).toFixed(2));
+      const totalCost =
+        form.tripType === "oneway"
+          ? Number((baseTotalCost * 2).toFixed(2))
+          : baseTotalCost;
 
       setFullData({
-        ...form,
+        tripType: form.tripType,
         pickupTime: form.pickupTime,
         returnTime: form.returnTime,
-        pickupDate: form.pickupDate,
-        pickupPostcode: fromCode,
-        dropoffPostcode: toCode,
-        distanceMiles: `${mileageResult.distanceMiles} miles\n`,
-        totalDuration: `${timeResult.hours}h ${timeResult.minutes}min`,
-        totalCost: `£${totalCost}`,
+        pickupDate: formatDateForDisplay(form.pickupDate),
+        pickupPostcode: pickupLocation,
+        dropoffPostcode: dropoffLocation,
+        distanceMiles: `${mileageResult.distanceMiles} miles`,
+        totalDuration: `${timeResult.hours}h ${timeResult.minutes}min (${billableHours.toFixed(
+          2,
+        )} billable hours)`,
+        baseTotalCost: money(baseTotalCost),
+        totalCost: money(totalCost),
       });
       setOpenQuote(true);
-
       handleReset();
     } catch (error) {
       console.error(error);
       router.push("/error");
+    } finally {
+      setIsCalculating(false);
     }
   };
 
@@ -192,277 +262,164 @@ export default function QuoteCalculator() {
           details and see your price right away.
         </p>
       </div>
-      {/* Desktop */}
-      <div className="bg-primary-50 mx-auto hidden min-h-screen items-center justify-center p-12 lg:flex">
+
+      <div className="bg-primary-50 mx-auto flex items-center justify-center p-4 sm:px-10 sm:py-8 lg:min-h-screen lg:p-12">
         <div className="flex w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-lg">
-          {/* LEFT: Form */}
-          <div className="w-1/2 p-12">
+          <div className="w-full p-6 sm:p-10 lg:w-1/2 lg:p-12">
             <div className="mb-6 flex items-center">
-              <h2 className="mr-2 text-4xl font-bold tracking-tight">
+              <h2 className="mr-2 text-2xl font-bold tracking-tight lg:text-4xl">
                 Calculate Your Trip
               </h2>
-              <div className="h-1 w-24 rounded-full bg-amber-400" />
+              <div className="h-1 w-16 rounded-full bg-amber-400 sm:w-24" />
             </div>
 
             <p className="text-primary-700 mb-8">
-              Enter your journey details to see the estimated quote in seconds
+              Enter your journey details to see the estimated quote in seconds.
             </p>
-            {/* Pickup time */}
-            <div className="space-y-6">
-              <div className="grid space-y-2">
-                <label className="block text-slate-700">Pick up time</label>
-                <div className="focus-within:border-secondary-600 flex items-center rounded-xl border border-slate-100 bg-slate-50 p-3 hover:shadow-md">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="mr-3 h-5 w-5 text-slate-400"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M12 8v4l3 3"
-                    />
-                    <circle
-                      cx="12"
-                      cy="12"
-                      r="9"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <select
-                    value={form.pickupTime}
-                    onChange={(e) => handleChange("pickupTime", e.target.value)}
-                    className={`flex-1 bg-transparent font-semibold outline-none ${!form.pickupTime ? "text-slate-400" : "text-black"} `}
-                  >
-                    {Array.from({ length: 24 * 4 }, (_, i) => {
-                      const totalMinutes = i * 15;
-                      const hours = Math.floor(totalMinutes / 60);
-                      const minutes = totalMinutes % 60;
 
-                      const value = `${hours.toString().padStart(2, "0")}:${minutes
-                        .toString()
-                        .padStart(2, "0")}`;
+            <div className="bg-primary-700 mb-6 grid grid-cols-2 gap-2 rounded-full p-2">
+              {(["return", "oneway"] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => handleChange("tripType", type)}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                    form.tripType === type
+                      ? "bg-white text-black shadow-sm"
+                      : "text-white hover:bg-white/10"
+                  }`}
+                >
+                  {type === "return" ? "Return Trip" : "One Way Trip"}
+                </button>
+              ))}
+            </div>
 
-                      const hour12 = hours % 12 === 0 ? 12 : hours % 12;
-                      const period = hours < 12 ? "AM" : "PM";
+            <datalist id="calculator-address-suggestions">
+              {ADDRESS_SUGGESTIONS.map((suggestion) => (
+                <option key={suggestion} value={suggestion} />
+              ))}
+            </datalist>
 
-                      return (
-                        <option key={value} value={value}>
-                          {hour12}:{minutes.toString().padStart(2, "0")}{" "}
-                          {period}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-              </div>
+            <div className="space-y-5">
+              <HeroInputField
+                label="Pick up time"
+                icon={<Clock size={18} />}
+                error={errors.pickupTime}
+                tone="light"
+              >
+                <HeroNativeSelect
+                  value={form.pickupTime}
+                  onChange={(e) => handleChange("pickupTime", e.target.value)}
+                  className={
+                    !form.pickupTime ? "text-slate-400" : "text-black"
+                  }
+                >
+                  <option value="">Select time</option>
+                  {timeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </HeroNativeSelect>
+              </HeroInputField>
 
-              {/* Return time */}
-              <div className="grid space-y-2">
-                <label className="block text-slate-700">
-                  <div className="flex items-center gap-2">
-                    <span>Return time</span>
-                    {/* Tooltip wrapper */}
-                    <span className="group relative hidden items-center md:inline-flex">
-                      {/* Info icon */}
-                      <svg
-                        className="h-4 w-4 cursor-pointer text-slate-400"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                        aria-hidden="true"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M18 10A8 8 0 11 2 10a8 8 0 0116 0zM9 9a1 1 0 012 0v4a1 1 0 11-2 0V9zm1-4a1.25 1.25 0 100 2.5A1.25 1.25 0 0010 5z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-
-                      {/* Tooltip */}
-                      <span className="pointer-events-none absolute top-full left-2/2 z-10 mt-2 w-max max-w-xs -translate-x-1/2 rounded-md bg-neutral-900 px-3 py-1.5 text-xs text-white opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:block">
-                        This is the time you will arrive back to your pick up
-                        address after your trip is completed.
+              <HeroInputField
+                label={
+                  <span className="flex items-center gap-2">
+                    Return time
+                    <span className="group relative inline-flex items-center">
+                      <Info size={14} className="text-slate-400" />
+                      <span className="pointer-events-none absolute top-full left-1/2 z-10 mt-2 w-max max-w-56 -translate-x-1/2 rounded-md bg-neutral-900 px-3 py-1.5 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+                        Time for your trip completion
                       </span>
                     </span>
-                    {/* Notice for mobile */}
-                    <span className="justify-self-end text-right text-xs">
-                      (Time for your trip completion)
-                    </span>
-                  </div>
-                </label>
-                <div className="focus-within:border-secondary-600 flex items-center rounded-xl border border-slate-100 bg-slate-50 p-3 hover:shadow-md">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="mr-3 h-5 w-5 text-slate-400"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M12 8v4l3 3"
-                    />
-                    <circle
-                      cx="12"
-                      cy="12"
-                      r="9"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <select
-                    value={form.returnTime}
-                    onChange={(e) => handleChange("returnTime", e.target.value)}
-                    className={`flex-1 bg-transparent font-semibold outline-none ${!form.returnTime ? "text-slate-400" : "text-black"} `}
-                  >
-                    {Array.from({ length: 24 * 4 }, (_, i) => {
-                      const totalMinutes = i * 15;
-                      const hours = Math.floor(totalMinutes / 60);
-                      const minutes = totalMinutes % 60;
-
-                      const value = `${hours.toString().padStart(2, "0")}:${minutes
-                        .toString()
-                        .padStart(2, "0")}`;
-
-                      const hour12 = hours % 12 === 0 ? 12 : hours % 12;
-                      const period = hours < 12 ? "AM" : "PM";
-
-                      return (
-                        <option key={value} value={value}>
-                          {hour12}:{minutes.toString().padStart(2, "0")}{" "}
-                          {period}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-              </div>
-
-              {/* Pickup postcode */}
-              <div className="grid space-y-2">
-                <label className="block text-slate-700">Pick up postcode</label>
-                <div className="focus-within:border-secondary-600 flex items-center rounded-xl border border-slate-100 bg-slate-50 p-3 hover:shadow-md">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="mr-3 h-5 w-5 text-slate-400"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M12 11c1.657 0 3-1.567 3-3.5S13.657 4 12 4 9 5.567 9 7.5 10.343 11 12 11z"
-                    />
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M12 21s8-4.5 8-10a8 8 0 10-16 0c0 5.5 8 10 8 10z"
-                    />
-                  </svg>
-                  <input
-                    value={form.pickupPostcode}
-                    onChange={(e) =>
-                      handleChange("pickupPostcode", e.target.value)
-                    }
-                    placeholder="e.g. SE15 2UQ"
-                    className="flex-1 bg-transparent font-semibold text-black placeholder-slate-400 outline-none"
-                  />
-                </div>
-                {errors.pickupPostcode && (
-                  <p className="text-xs text-red-700">
-                    {errors.pickupPostcode}
-                  </p>
-                )}
-              </div>
-
-              {/* Dropoff postcode */}
-              <div className="grid space-y-2">
-                {" "}
-                <label className="block text-slate-700">
-                  Drop off post code
-                </label>
-                <div className="focus-within:border-secondary-600 flex items-center rounded-xl border border-slate-100 bg-slate-50 p-3 hover:shadow-md">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="mr-3 h-5 w-5 text-slate-400"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M12 11c1.657 0 3-1.567 3-3.5S13.657 4 12 4 9 5.567 9 7.5 10.343 11 12 11z"
-                    />
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M12 21s8-4.5 8-10a8 8 0 10-16 0c0 5.5 8 10 8 10z"
-                    />
-                  </svg>
-                  <input
-                    value={form.dropoffPostcode}
-                    onChange={(e) =>
-                      handleChange("dropoffPostcode", e.target.value)
-                    }
-                    placeholder="e.g. SE15 2UQ"
-                    className="flex-1 bg-transparent font-semibold text-black placeholder-slate-400 outline-none"
-                  />
-                </div>
-                {errors.dropoffPostcode && (
-                  <p className="text-xs text-red-700">
-                    {errors.dropoffPostcode}
-                  </p>
-                )}
-              </div>
-
-              {/* pickup date */}
-              <div className="grid space-y-2">
-                <label className="block text-slate-700">Pickup Date</label>
-                <div className="focus-within:border-secondary-600 flex items-center rounded-xl border border-slate-100 bg-slate-50 p-3 hover:shadow-md">
-                  <Calendar size={16} className="mr-4 text-slate-400" />
-                  <input
-                    value={form.pickupDate}
-                    onChange={(e) => handleChange("pickupDate", e.target.value)}
-                    placeholder="DD/MM/YYYY"
-                    className="flex-1 bg-transparent font-semibold text-black placeholder-slate-400 outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Buttons */}
-              <div className="mt-6 flex items-center gap-6">
-                <button
-                  onClick={handleCalculate}
-                  className="bg-primary-700 hover:text-primary-700 hover:bg-primary-50 rounded-xl px-6 py-3 text-white shadow-md transition hover:border hover:shadow-lg"
+                  </span>
+                }
+                icon={<Clock size={18} />}
+                error={errors.returnTime}
+                tone="light"
+              >
+                <HeroNativeSelect
+                  value={form.returnTime}
+                  onChange={(e) => handleChange("returnTime", e.target.value)}
+                  className={
+                    !form.returnTime ? "text-slate-400" : "text-black"
+                  }
                 >
-                  Calculate Quote
+                  <option value="">Select time</option>
+                  {timeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </HeroNativeSelect>
+              </HeroInputField>
+
+              <HeroInputField
+                label="Pick up address or postcode"
+                icon={<MapPin size={18} />}
+                error={errors.pickupLocation}
+                tone="light"
+              >
+                <HeroTextInput
+                  value={form.pickupLocation}
+                  onChange={(e) => handleChange("pickupLocation", e.target.value)}
+                  placeholder="e.g. Heathrow Airport or SW1A 1AA"
+                  list="calculator-address-suggestions"
+                  autoComplete="street-address"
+                />
+              </HeroInputField>
+
+              <HeroInputField
+                label="Drop off address or postcode"
+                icon={<MapPin size={18} />}
+                error={errors.dropoffLocation}
+                tone="light"
+              >
+                <HeroTextInput
+                  value={form.dropoffLocation}
+                  onChange={(e) =>
+                    handleChange("dropoffLocation", e.target.value)
+                  }
+                  placeholder="e.g. Wembley Stadium or E20 2ST"
+                  list="calculator-address-suggestions"
+                  autoComplete="street-address"
+                />
+              </HeroInputField>
+
+              <HeroDatePickerField
+                label="Pickup date"
+                value={form.pickupDate}
+                minValue={minPickupDate}
+                onChange={(value) => handleChange("pickupDate", value)}
+                error={errors.pickupDate}
+                tone="light"
+              />
+
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={handleCalculate}
+                  disabled={isCalculating}
+                  className="bg-primary-700 hover:text-primary-700 hover:bg-primary-50 flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-3 font-semibold text-white shadow-md transition hover:border hover:shadow-lg disabled:cursor-wait disabled:opacity-70"
+                >
+                  <Calculator size={18} />
+                  {isCalculating ? "Calculating..." : "Calculate Quote"}
                 </button>
 
                 <button
+                  type="button"
                   onClick={handleReset}
-                  className="border-primary/50 hover:border-primary text-primary-700 rounded-xl border px-6 py-3"
+                  className="border-primary/50 hover:border-primary text-primary-700 flex flex-1 items-center justify-center gap-2 rounded-xl border px-6 py-3 font-semibold sm:flex-none"
                 >
+                  <RotateCcw size={18} />
                   Reset
                 </button>
               </div>
             </div>
           </div>
 
-          <div className="relative w-1/2">
+          <div className="relative hidden w-1/2 lg:block">
             <div className="absolute inset-0 -right-16">
               <div
                 className="h-full w-full"
@@ -470,269 +427,15 @@ export default function QuoteCalculator() {
                   clipPath: "polygon(12% 0, 100% 0, 100% 100%, 0 100%)",
                 }}
               >
-                <Image src={image} alt="van" fill className="object-cover" />
+                <Image
+                  src="/buses/bus-1.webp"
+                  alt="London minibus"
+                  fill
+                  sizes="(min-width: 1024px) 50vw, 0vw"
+                  className="object-cover"
+                />
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/*  Mobile*/}
-      <div className="bg-primary-50 w-full p-4 sm:px-10 sm:py-8 lg:hidden">
-        <div className="mb-6 flex items-center">
-          <h2 className="mr-2 text-2xl font-bold tracking-tight">
-            Calculate Your Trip
-          </h2>
-          <div className="h-1 w-24 rounded-full bg-amber-400" />
-        </div>
-
-        <p className="text-primary-700 mb-8">
-          Enter your journey details to see the estimated quote in seconds
-        </p>
-
-        <div className="space-y-3">
-          {/* Pickup time */}
-          <div className="grid space-y-2">
-            {" "}
-            <label className="block text-slate-700">Pick up time</label>
-            <div className="focus-within:border-secondary-600 flex items-center rounded-xl border border-slate-100 bg-slate-50 p-3 hover:shadow-md">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="mr-3 h-5 w-5 text-slate-400"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M12 8v4l3 3"
-                />
-                <circle
-                  cx="12"
-                  cy="12"
-                  r="9"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <select
-                value={form.pickupTime}
-                onChange={(e) => handleChange("pickupTime", e.target.value)}
-                className={`flex-1 bg-transparent font-semibold outline-none ${!form.pickupTime ? "text-slate-400" : "text-black"} `}
-              >
-                {Array.from({ length: 24 * 4 }, (_, i) => {
-                  const totalMinutes = i * 15;
-                  const hours = Math.floor(totalMinutes / 60);
-                  const minutes = totalMinutes % 60;
-
-                  const value = `${hours.toString().padStart(2, "0")}:${minutes
-                    .toString()
-                    .padStart(2, "0")}`;
-
-                  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
-                  const period = hours < 12 ? "AM" : "PM";
-
-                  return (
-                    <option key={value} value={value}>
-                      {hour12}:{minutes.toString().padStart(2, "0")} {period}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          </div>
-
-          {/* Return time */}
-          <div className="grid w-full space-y-2">
-            <label className="block text-slate-700">
-              <div className="flex items-center gap-2">
-                <span>Return time</span>
-                {/* Tooltip wrapper */}
-                <span className="group relative hidden items-center md:inline-flex">
-                  {/* Info icon */}
-                  <svg
-                    className="h-4 w-4 cursor-pointer text-slate-400"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M18 10A8 8 0 11 2 10a8 8 0 0116 0zM9 9a1 1 0 012 0v4a1 1 0 11-2 0V9zm1-4a1.25 1.25 0 100 2.5A1.25 1.25 0 0010 5z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-
-                  {/* Tooltip */}
-                  <span className="pointer-events-none absolute top-full left-1/2 z-10 mt-2 w-max -translate-x-1/2 rounded-md bg-neutral-900 px-3 py-1.5 text-xs text-white opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:block">
-                    This is the time you will arrive back to your pick up
-                    address after your trip is completed.
-                  </span>
-                </span>
-                {/* Notice for mobile */}
-                <span className="justify-self-end text-right text-xs">
-                  (Time for your trip completion)
-                </span>
-              </div>
-            </label>
-            <div className="focus-within:border-secondary-600 flex items-center rounded-xl border border-slate-100 bg-slate-50 p-3 hover:shadow-md">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="mr-3 h-5 w-5 text-slate-400"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M12 8v4l3 3"
-                />
-                <circle
-                  cx="12"
-                  cy="12"
-                  r="9"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <select
-                value={form.returnTime}
-                onChange={(e) => handleChange("returnTime", e.target.value)}
-                className={`flex-1 bg-transparent font-semibold outline-none ${!form.returnTime ? "text-slate-400" : "text-black"} `}
-              >
-                {Array.from({ length: 24 * 4 }, (_, i) => {
-                  const totalMinutes = i * 15;
-                  const hours = Math.floor(totalMinutes / 60);
-                  const minutes = totalMinutes % 60;
-
-                  const value = `${hours.toString().padStart(2, "0")}:${minutes
-                    .toString()
-                    .padStart(2, "0")}`;
-
-                  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
-                  const period = hours < 12 ? "AM" : "PM";
-
-                  return (
-                    <option key={value} value={value}>
-                      {hour12}:{minutes.toString().padStart(2, "0")} {period}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          </div>
-
-          {/* Pickup postcode */}
-          <div className="grid space-y-2">
-            {" "}
-            <label className="block text-slate-700">Pick up postcode</label>
-            <div className="focus-within:border-secondary-600 flex items-center rounded-xl border border-slate-100 bg-slate-50 p-3 hover:shadow-md">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="mr-3 h-5 w-5 text-slate-400"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M12 11c1.657 0 3-1.567 3-3.5S13.657 4 12 4 9 5.567 9 7.5 10.343 11 12 11z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M12 21s8-4.5 8-10a8 8 0 10-16 0c0 5.5 8 10 8 10z"
-                />
-              </svg>
-              <input
-                value={form.pickupPostcode}
-                onChange={(e) => handleChange("pickupPostcode", e.target.value)}
-                placeholder="e.g. SE15 2UQ"
-                className="flex-1 bg-transparent font-semibold text-black placeholder-slate-400 outline-none"
-              />
-            </div>{" "}
-            {errors.pickupPostcode && (
-              <p className="text-xs text-red-700">{errors.pickupPostcode}</p>
-            )}
-          </div>
-
-          {/* Dropoff postcode */}
-          <div className="grid space-y-2">
-            {" "}
-            <label className="block text-slate-700">Drop off post code</label>
-            <div className="focus-within:border-secondary-600 flex items-center rounded-xl border border-slate-100 bg-slate-50 p-3 hover:shadow-md">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="mr-3 h-5 w-5 text-slate-400"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M12 11c1.657 0 3-1.567 3-3.5S13.657 4 12 4 9 5.567 9 7.5 10.343 11 12 11z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M12 21s8-4.5 8-10a8 8 0 10-16 0c0 5.5 8 10 8 10z"
-                />
-              </svg>
-              <input
-                value={form.dropoffPostcode}
-                onChange={(e) =>
-                  handleChange("dropoffPostcode", e.target.value)
-                }
-                placeholder="e.g. SE15 2UQ"
-                className="flex-1 bg-transparent font-semibold text-black placeholder-slate-400 outline-none"
-              />
-            </div>{" "}
-            {errors.dropoffPostcode && (
-              <p className="text-xs text-red-700">{errors.dropoffPostcode}</p>
-            )}
-          </div>
-
-          {/* pickup date */}
-          <div className="grid space-y-2">
-            <label className="block text-slate-700">Pickup Date</label>
-            <div className="focus-within:border-secondary-600 flex items-center rounded-xl border border-slate-100 bg-slate-50 p-3 hover:shadow-md">
-              <Calendar size={16} className="mr-4 text-slate-400" />
-              <input
-                value={form.pickupDate}
-                onChange={(e) => handleChange("pickupDate", e.target.value)}
-                placeholder="DD/MM/YYYY"
-                className="flex-1 bg-transparent font-semibold text-black placeholder-slate-400 outline-none"
-              />
-            </div>
-          </div>
-
-          {/* Buttons */}
-          <div className="mt-6 flex w-full items-center justify-between gap-6">
-            <button
-              onClick={handleCalculate}
-              className="bg-primary-700 w-full rounded-md py-2 text-white shadow-md transition hover:shadow-lg"
-            >
-              Calculate
-            </button>
-
-            <button
-              onClick={handleReset}
-              className="border-primary text-primary-700 w-full rounded-md border py-2"
-            >
-              Reset
-            </button>
           </div>
         </div>
       </div>

@@ -6,6 +6,7 @@ export type InquiryFormValues = {
 };
 
 export type QuoteFormState = {
+  tripType?: "return" | "oneway";
   pickupTime: string;
   returnTime: string;
   pickupDate: string;
@@ -14,5 +15,6 @@ export type QuoteFormState = {
   email?: string;
   distanceMiles: string;
   totalDuration: string;
+  baseTotalCost?: string;
   totalCost: string;
 };

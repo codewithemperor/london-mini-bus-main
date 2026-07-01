@@ -218,7 +218,7 @@ const ServicesPage = () => {
           {" "}
           <div
             className="relative h-[650px] bg-cover bg-center"
-            style={{ backgroundImage: "url('/buses/tower-bus.png')" }}
+            style={{ backgroundImage: "url('/buses/tower-bus.webp')" }}
           >
             {/* Overlay */}
             <div className="absolute inset-0 bg-black/70"></div>

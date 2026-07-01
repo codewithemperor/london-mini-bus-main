@@ -1,18 +1,38 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
 import {
   Briefcase,
-  Calendar,
-  CheckCircle,
   Clock,
   Mail,
   MapPin,
-  CircleAlert,
   Phone,
   Users,
 } from "lucide-react";
+import {
+  FieldStateIcon,
+  HeroDatePickerField,
+  HeroInputField,
+  HeroNativeSelect,
+  HeroTextInput,
+} from "@/components/ui/hero-form-field";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import React, { useState } from "react";
+
+const ADDRESS_SUGGESTIONS = [
+  "Heathrow Airport, Hounslow",
+  "Gatwick Airport, Horley",
+  "Stansted Airport, Stansted",
+  "Luton Airport, Luton",
+  "London City Airport, London",
+  "King's Cross Station, London",
+  "Victoria Coach Station, London",
+  "Waterloo Station, London",
+  "Wembley Stadium, London",
+  "The O2, London",
+  "SW1A 1AA",
+  "SE15 2UQ",
+  "E20 2ST",
+];
 
 const RequestQuoteForm = () => {
   const [tripType, setTripType] = useState<"return" | "oneway">("return");
@@ -38,18 +58,29 @@ const RequestQuoteForm = () => {
     Partial<Record<keyof typeof form, boolean>>
   >({});
 
-  const isValidDDMMYYYY = (value: string) => {
-    // 1. Strict format check
-    const regex = /^\d{2}\/\d{2}\/\d{4}$/;
+  const updateTripType = (nextTripType: "return" | "oneway") => {
+    setTripType(nextTripType);
+
+    if (nextTripType === "oneway") {
+      setForm((prev) => ({ ...prev, returnDate: "", returnTime: "" }));
+      setErrors((prev) => ({
+        ...prev,
+        returnDate: undefined,
+        returnTime: undefined,
+      }));
+      setValidFields((prev) => ({
+        ...prev,
+        returnDate: false,
+        returnTime: false,
+      }));
+    }
+  };
+
+  const isValidISODate = (value: string) => {
+    const regex = /^\d{4}-\d{2}-\d{2}$/;
     if (!regex.test(value)) return false;
 
-    const [day, month, year] = value.split("/").map(Number);
-
-    // 2. Basic range checks
-    if (month < 1 || month > 12) return false;
-    if (day < 1 || day > 31) return false;
-
-    // 3. Real calendar date check (no auto-correction)
+    const [year, month, day] = value.split("-").map(Number);
     const date = new Date(year, month - 1, day);
 
     return (
@@ -76,16 +107,16 @@ const RequestQuoteForm = () => {
       case "pickupDate":
         if (!value) {
           error = "Pick up date is required";
-        } else if (!isValidDDMMYYYY(value)) {
-          error = "Date must be in DD/MM/YYYY format";
+        } else if (!isValidISODate(value)) {
+          error = "Enter a valid pick up date";
         }
         break;
 
       case "returnDate":
         if (tripType === "return" && !value) {
           error = "Return date is required";
-        } else if (tripType === "return" && !isValidDDMMYYYY(value)) {
-          error = "Return date must be in DD/MM/YYYY format";
+        } else if (tripType === "return" && !isValidISODate(value)) {
+          error = "Enter a valid return date";
         }
         break;
 
@@ -98,11 +129,11 @@ const RequestQuoteForm = () => {
         break;
 
       case "pickupPostcode":
-        if (!value.trim()) error = "Pick up postcode is required";
+        if (!value.trim()) error = "Pick up address or postcode is required";
         break;
 
       case "destinationPostcode":
-        if (!value.trim()) error = "Destination postcode is required";
+        if (!value.trim()) error = "Destination address or postcode is required";
         break;
 
       case "passengers":
@@ -133,14 +164,14 @@ const RequestQuoteForm = () => {
 
     if (!form.pickupDate) {
       newErrors.pickupDate = "Pick up date is required";
-    } else if (!isValidDDMMYYYY(form.pickupDate)) {
-      newErrors.pickupDate = "Date must be in DD/MM/YYYY format";
+    } else if (!isValidISODate(form.pickupDate)) {
+      newErrors.pickupDate = "Enter a valid pick up date";
     }
 
     if (tripType === "return" && !form.returnDate) {
       newErrors.returnDate = "Return date is required";
-    } else if (tripType === "return" && !isValidDDMMYYYY(form.returnDate)) {
-      newErrors.returnDate = "Return date must be in DD/MM/YYYY format";
+    } else if (tripType === "return" && !isValidISODate(form.returnDate)) {
+      newErrors.returnDate = "Enter a valid return date";
     }
 
     if (!form.pickupTime) {
@@ -152,11 +183,11 @@ const RequestQuoteForm = () => {
     }
 
     if (!form.pickupPostcode.trim()) {
-      newErrors.pickupPostcode = "Pick up postcode is required";
+      newErrors.pickupPostcode = "Pick up address or postcode is required";
     }
 
     if (!form.destinationPostcode.trim()) {
-      newErrors.destinationPostcode = "Destination postcode is required";
+      newErrors.destinationPostcode = "Destination address or postcode is required";
     }
 
     if (!form.passengers || Number(form.passengers) < 1) {
@@ -168,33 +199,13 @@ const RequestQuoteForm = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const formatDateInput = (value: string) => {
-    const digits = value.replace(/\D/g, "");
-
-    const limited = digits.slice(0, 8);
-
-    const parts = [];
-
-    if (limited.length >= 2) parts.push(limited.slice(0, 2));
-    else if (limited.length > 0) parts.push(limited);
-
-    if (limited.length >= 4) parts.push(limited.slice(2, 4));
-    else if (limited.length > 2) parts.push(limited.slice(2));
-
-    if (limited.length > 4) parts.push(limited.slice(4));
-
-    return parts.join("/");
-  };
-
   const updateField =
     (field: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-      let value = e.target.value;
+      setFieldValue(field, e.target.value);
+    };
 
-      if (field === "pickupDate" || field === "returnDate") {
-        value = formatDateInput(value);
-      }
-
+  const setFieldValue = (field: keyof typeof form, value: string) => {
       setForm((prev) => ({ ...prev, [field]: value }));
 
       const error = validateField(field, value);
@@ -208,7 +219,7 @@ const RequestQuoteForm = () => {
         ...prev,
         [field]: !error && value.trim() !== "",
       }));
-    };
+  };
 
   const handleSubmit = async () => {
     const isValid = validateForm();
@@ -223,16 +234,6 @@ const RequestQuoteForm = () => {
         ...form,
       }),
     });
-
-//     const res = await fetch("/api/request-quote", {
-//   method: "POST",
-//   headers: { "Content-Type": "application/json" },
-//   body: JSON.stringify({ tripType, ...form }),
-// });
-
-console.log("STATUS:", res.status);
-console.log("TEXT:", await res.text());
-
 
     if (res.ok) {
       router.push("/success");
@@ -251,7 +252,7 @@ console.log("TEXT:", await res.text());
               ? "bg-indigo-200 text-black"
               : "text-white hover:scale-95"
           }`}
-          onClick={() => setTripType("return")}
+          onClick={() => updateTripType("return")}
         >
           Return Trip
         </button>
@@ -262,13 +263,19 @@ console.log("TEXT:", await res.text());
               ? "bg-indigo-200 text-black"
               : "text-white hover:scale-95"
           }`}
-          onClick={() => setTripType("oneway")}
+          onClick={() => updateTripType("oneway")}
         >
           One Way Trip
         </button>
       </div>
 
       <div className="grid grid-cols-1 sm:px-6 lg:grid-cols-3">
+        <datalist id="request-address-suggestions">
+          {ADDRESS_SUGGESTIONS.map((suggestion) => (
+            <option key={suggestion} value={suggestion} />
+          ))}
+        </datalist>
+
         {/* Form */}
         <div className="col-span-2 flex h-full flex-col justify-between rounded-xl bg-indigo-50 px-5 py-12 shadow-lg sm:rounded-none sm:px-8 sm:shadow-none">
           <div>
@@ -281,243 +288,136 @@ console.log("TEXT:", await res.text());
           </div>
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            {/* Phone */}
-            <label className="space-y-1 font-medium text-neutral-700">
-              Phone number
-              <div
-                className={`focus-within:border-secondary-600 mt-2 flex items-center gap-3 rounded-lg border bg-white px-4 py-3 shadow-md ${
-                  errors.phone
-                    ? "border-red-700"
-                    : validFields.phone
-                      ? "border-green-500"
-                      : "border-slate-100"
-                }`}
-              >
-                <Phone size={16} />
-                <input
-                  type="text"
-                  placeholder="+44 208 987 8046"
-                  value={form.phone}
-                  onChange={updateField("phone")}
-                  className="w-full bg-transparent outline-none"
-                />
+            <HeroInputField
+              label="Phone number"
+              icon={<Phone size={16} />}
+              error={errors.phone}
+              valid={validFields.phone}
+              suffix={
+                <FieldStateIcon error={errors.phone} valid={validFields.phone} />
+              }
+            >
+              <HeroTextInput
+                type="text"
+                placeholder="+44 208 987 8046"
+                value={form.phone}
+                onChange={updateField("phone")}
+              />
+            </HeroInputField>
 
-                {errors.phone && <CircleAlert className="text-red-600" />}
-                {validFields.phone && (
-                  <CheckCircle className="text-green-600" />
-                )}
-              </div>
-              {errors.phone && (
-                <p className="text-sm text-red-600">{errors.phone}</p>
-              )}
-              {validFields.phone && (
-                <p className="text-sm text-green-600">All set!</p>
-              )}
-            </label>
+            <HeroInputField
+              label="Email address"
+              icon={<Mail size={16} />}
+              error={errors.email}
+              valid={validFields.email}
+              suffix={
+                <FieldStateIcon error={errors.email} valid={validFields.email} />
+              }
+            >
+              <HeroTextInput
+                type="email"
+                placeholder="john@gmail.com"
+                value={form.email}
+                onChange={updateField("email")}
+              />
+            </HeroInputField>
 
-            {/* Email */}
-            <label className="space-y-1 font-medium text-neutral-700">
-              Email address
-              <div
-                className={`focus-within:border-secondary-600 mt-2 flex items-center gap-3 rounded-lg border bg-white px-4 py-3 shadow-md ${
-                  errors.email
-                    ? "border-red-700"
-                    : validFields.email
-                      ? "border-green-500"
-                      : "border-slate-100"
-                }`}
-              >
-                <Mail size={16} />
-                <input
-                  type="email"
-                  placeholder="john@gmail.com"
-                  value={form.email}
-                  onChange={updateField("email")}
-                  className="w-full bg-transparent outline-none"
-                />
-                {errors.email && <CircleAlert className="text-red-600" />}
-                {validFields.email && (
-                  <CheckCircle className="text-green-600" />
-                )}
-              </div>
-              {errors.email && (
-                <p className="text-sm text-red-600">{errors.email}</p>
-              )}
-              {validFields.email && (
-                <p className="text-sm text-green-600">All set!</p>
-              )}
-            </label>
+            <HeroDatePickerField
+              label="Pick up date"
+              value={form.pickupDate}
+              onChange={(value) => setFieldValue("pickupDate", value)}
+              error={errors.pickupDate}
+              valid={validFields.pickupDate}
+            />
 
-            {/* Pick up date */}
-            <label className="space-y-1 font-medium text-neutral-700">
-              Pick up date
-              <div
-                className={`focus-within:border-secondary-600 mt-2 flex items-center gap-3 rounded-lg border bg-white px-4 py-3 shadow-md ${
-                  errors.pickupDate
-                    ? "border-red-700"
-                    : validFields.pickupDate
-                      ? "border-green-500"
-                      : "border-slate-100"
-                }`}
-              >
-                <Calendar size={16} />
-                <input
-                  type="text"
-                  placeholder="DD/MM/YYYY"
-                  value={form.pickupDate}
-                  onChange={updateField("pickupDate")}
-                  inputMode="numeric"
-                  pattern="\d{2}/\d{2}/\d{4}"
-                  className="w-full bg-transparent outline-none"
-                />
-
-                {errors.pickupDate && <CircleAlert className="text-red-600" />}
-                {validFields.pickupDate && (
-                  <CheckCircle className="text-green-600" />
-                )}
-              </div>
-              {errors.pickupDate && (
-                <p className="text-sm text-red-600">{errors.pickupDate}</p>
-              )}
-              {validFields.pickupDate && (
-                <p className="text-sm text-green-600">All set!</p>
-              )}
-            </label>
-
-            {/* Return date */}
             {tripType === "return" && (
-              <label className="space-y-1 font-medium text-neutral-700">
-                Return date
-                <div
-                  className={`focus-within:border-secondary-600 mt-2 flex items-center gap-3 rounded-lg border bg-white px-4 py-3 shadow-md ${
-                    errors.returnDate
-                      ? "border-red-700"
-                      : validFields.returnDate
-                        ? "border-green-500"
-                        : "border-slate-100"
-                  }`}
-                >
-                  <Calendar size={16} />
-                  <input
-                    type="text"
-                    placeholder="DD/MM/YYYY"
-                    value={form.returnDate}
-                    onChange={updateField("returnDate")}
-                    inputMode="numeric"
-                    pattern="\d{2}/\d{2}/\d{4}"
-                    className="w-full bg-transparent outline-none"
-                  />
-
-                  {errors.returnDate && (
-                    <CircleAlert className="text-red-600" />
-                  )}
-                  {validFields.returnDate && (
-                    <CheckCircle className="text-green-600" />
-                  )}
-                </div>
-                {errors.returnDate && (
-                  <p className="text-sm text-red-600">{errors.returnDate}</p>
-                )}
-                {validFields.returnDate && (
-                  <p className="text-sm text-green-600">All set!</p>
-                )}
-              </label>
+              <HeroDatePickerField
+                label="Return date"
+                value={form.returnDate}
+                onChange={(value) => setFieldValue("returnDate", value)}
+                error={errors.returnDate}
+                valid={validFields.returnDate}
+              />
             )}
 
-            {/* Pick up time */}
-            <label className="space-y-1 font-medium text-neutral-700">
-              Pick up time
-              <div
-                className={`focus-within:border-secondary-600 mt-2 flex items-center gap-3 rounded-lg border bg-white px-4 py-3 shadow-md ${
-                  errors.pickupTime
-                    ? "border-red-700"
-                    : validFields.pickupTime
-                      ? "border-green-500"
-                      : "border-slate-100"
-                }`}
+            <HeroInputField
+              label="Pick up time"
+              icon={<Clock size={16} />}
+              error={errors.pickupTime}
+              valid={validFields.pickupTime}
+              suffix={
+                <FieldStateIcon
+                  error={errors.pickupTime}
+                  valid={validFields.pickupTime}
+                />
+              }
+            >
+              <HeroNativeSelect
+                value={form.pickupTime}
+                onChange={updateField("pickupTime")}
+                className={!form.pickupTime ? "text-slate-500" : "text-black"}
               >
-                <Clock size={16} />
-                <select
-                  value={form.pickupTime}
-                  onChange={updateField("pickupTime")}
-                  className={`flex-1 bg-transparent outline-none ${!form.pickupTime ? "text-slate-500" : "text-black"} `}
-                >
-                  {Array.from({ length: 24 }, (_, h) => {
-                    const value = `${h.toString().padStart(2, "0")}:00`;
-                    const hour12 = h % 12 === 0 ? 12 : h % 12;
-                    const period = h < 12 ? "AM" : "PM";
+                <option value="">Select time</option>
+                {Array.from({ length: 24 }, (_, h) => {
+                  const value = `${h.toString().padStart(2, "0")}:00`;
+                  const hour12 = h % 12 === 0 ? 12 : h % 12;
+                  const period = h < 12 ? "AM" : "PM";
 
-                    return (
-                      <option key={value} value={value}>
-                        {hour12}:00 {period}
-                      </option>
-                    );
-                  })}
-                </select>
-                {errors.pickupTime && <CircleAlert className="text-red-600" />}
-                {validFields.pickupTime && (
-                  <CheckCircle className="text-green-600" />
-                )}
-              </div>
-              {errors.pickupTime && (
-                <p className="text-sm text-red-600">{errors.pickupTime}</p>
-              )}
-              {validFields.pickupTime && (
-                <p className="text-sm text-green-600">All set!</p>
-              )}
-            </label>
+                  return (
+                    <option key={value} value={value}>
+                      {hour12}:00 {period}
+                    </option>
+                  );
+                })}
+              </HeroNativeSelect>
+            </HeroInputField>
 
             {/* Return time */}
 
-            <label className="space-y-1 font-medium text-neutral-700">
-              <div className="flex items-center gap-2">
-                <span>Return time</span>
-
-                {/* Tooltip wrapper */}
-                <span className="group relative hidden items-center md:inline-flex">
-                  {/* Info icon */}
-                  <svg
-                    className="h-4 w-4 cursor-pointer text-slate-400"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M18 10A8 8 0 11 2 10a8 8 0 0116 0zM9 9a1 1 0 012 0v4a1 1 0 11-2 0V9zm1-4a1.25 1.25 0 100 2.5A1.25 1.25 0 0010 5z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-
-                  {/* Tooltip */}
-                  <span className="pointer-events-none absolute top-full left-1/2 z-10 mt-2 w-max -translate-x-1/2 rounded-md bg-neutral-900 px-3 py-1.5 text-xs text-white opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:block">
-                    This is the time you will arrive back to your pick up
-                    address after your trip is completed.
-                  </span>
-                </span>
-
-                {/* Notice for mobile */}
-                <span className="justify-self-end text-right text-xs">
-                  (Time for your trip completion)
-                </span>
-              </div>
-              {/* field */}
-              <div
-                className={`focus-within:border-secondary-600 mt-2 flex items-center gap-3 rounded-lg border bg-white px-4 py-3 shadow-md ${
-                  errors.returnTime
-                    ? "border-red-700"
-                    : validFields.returnTime
-                      ? "border-green-500"
-                      : "border-slate-100"
-                }`}
+            {tripType === "return" && (
+              <HeroInputField
+                label={
+                  <div className="flex items-center gap-2">
+                    <span>Return time</span>
+                    <span className="group relative hidden items-center md:inline-flex">
+                      <svg
+                        className="h-4 w-4 cursor-pointer text-slate-400"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        aria-hidden="true"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M18 10A8 8 0 11 2 10a8 8 0 0116 0zM9 9a1 1 0 012 0v4a1 1 0 11-2 0V9zm1-4a1.25 1.25 0 100 2.5A1.25 1.25 0 0010 5z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      <span className="pointer-events-none absolute top-full left-1/2 z-10 mt-2 w-max -translate-x-1/2 rounded-md bg-neutral-900 px-3 py-1.5 text-xs text-white opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:block">
+                        This is the time you will arrive back to your pick up
+                        address after your trip is completed.
+                      </span>
+                    </span>
+                    <span className="justify-self-end text-right text-xs">
+                      (Time for your trip completion)
+                    </span>
+                  </div>
+                }
+                icon={<Clock size={16} />}
+                error={errors.returnTime}
+                valid={validFields.returnTime}
+                suffix={
+                  <FieldStateIcon
+                    error={errors.returnTime}
+                    valid={validFields.returnTime}
+                  />
+                }
               >
-                <Clock size={16} />
-
-                <select
+                <HeroNativeSelect
                   value={form.returnTime}
                   onChange={updateField("returnTime")}
-                  className={`flex-1 bg-transparent outline-none ${!form.returnTime ? "text-slate-500" : "text-black"} `}
+                  className={!form.returnTime ? "text-slate-500" : "text-black"}
                 >
+                  <option value="">Select time</option>
                   {Array.from({ length: 24 }, (_, h) => {
                     const value = `${h.toString().padStart(2, "0")}:00`;
                     const hour12 = h % 12 === 0 ? 12 : h % 12;
@@ -529,151 +429,93 @@ console.log("TEXT:", await res.text());
                       </option>
                     );
                   })}
-                </select>
-                {errors.returnTime && <CircleAlert className="text-red-600" />}
-                {validFields.returnTime && (
-                  <CheckCircle className="text-green-600" />
-                )}
-              </div>
-              {errors.returnTime && (
-                <p className="text-sm text-red-600">{errors.returnTime}</p>
-              )}
-              {validFields.returnTime && (
-                <p className="text-sm text-green-600">All set!</p>
-              )}
-            </label>
+                </HeroNativeSelect>
+              </HeroInputField>
+            )}
 
-            {/* Pick up postcode */}
-            <label className="space-y-1 font-medium text-neutral-700">
-              Pick up post code
-              <div
-                className={`focus-within:border-secondary-600 mt-2 flex items-center gap-3 rounded-lg border bg-white px-4 py-3 shadow-md ${
-                  errors.pickupPostcode
-                    ? "border-red-700"
-                    : validFields.pickupPostcode
-                      ? "border-green-500"
-                      : "border-slate-100"
-                }`}
-              >
-                <MapPin size={16} />
-                <input
-                  type="text"
-                  placeholder="SE15 2UQ"
-                  value={form.pickupPostcode}
-                  onChange={updateField("pickupPostcode")}
-                  className="w-full bg-transparent outline-none"
+            <HeroInputField
+              label="Pick up address or postcode"
+              icon={<MapPin size={16} />}
+              error={errors.pickupPostcode}
+              valid={validFields.pickupPostcode}
+              suffix={
+                <FieldStateIcon
+                  error={errors.pickupPostcode}
+                  valid={validFields.pickupPostcode}
                 />
+              }
+            >
+              <HeroTextInput
+                type="text"
+                placeholder="Heathrow Airport or SE15 2UQ"
+                value={form.pickupPostcode}
+                onChange={updateField("pickupPostcode")}
+                list="request-address-suggestions"
+                autoComplete="street-address"
+              />
+            </HeroInputField>
 
-                {errors.pickupPostcode && (
-                  <CircleAlert className="text-red-600" />
-                )}
-                {validFields.pickupPostcode && (
-                  <CheckCircle className="text-green-600" />
-                )}
-              </div>
-              {errors.pickupPostcode && (
-                <p className="text-sm text-red-600">{errors.pickupPostcode}</p>
-              )}
-              {validFields.pickupPostcode && (
-                <p className="text-sm text-green-600">All set!</p>
-              )}
-            </label>
-
-            {/* Destination postcode */}
-            <label className="space-y-1 font-medium text-neutral-700">
-              Destination post code
-              <div
-                className={`focus-within:border-secondary-600 mt-2 flex items-center gap-3 rounded-lg border bg-white px-4 py-3 shadow-md ${
-                  errors.destinationPostcode
-                    ? "border-red-700"
-                    : validFields.destinationPostcode
-                      ? "border-green-500"
-                      : "border-slate-100"
-                }`}
-              >
-                <MapPin size={16} />
-                <input
-                  type="text"
-                  placeholder="SE15 2UQ"
-                  value={form.destinationPostcode}
-                  onChange={updateField("destinationPostcode")}
-                  className="w-full bg-transparent outline-none"
+            <HeroInputField
+              label="Destination address or postcode"
+              icon={<MapPin size={16} />}
+              error={errors.destinationPostcode}
+              valid={validFields.destinationPostcode}
+              suffix={
+                <FieldStateIcon
+                  error={errors.destinationPostcode}
+                  valid={validFields.destinationPostcode}
                 />
-                {errors.destinationPostcode && (
-                  <CircleAlert className="text-red-600" />
-                )}
-                {validFields.destinationPostcode && (
-                  <CheckCircle className="text-green-600" />
-                )}
-              </div>
-              {errors.destinationPostcode && (
-                <p className="text-sm text-red-600">
-                  {errors.destinationPostcode}
-                </p>
-              )}
-              {validFields.destinationPostcode && (
-                <p className="text-sm text-green-600">All set!</p>
-              )}
-            </label>
+              }
+            >
+              <HeroTextInput
+                type="text"
+                placeholder="Wembley Stadium or E20 2ST"
+                value={form.destinationPostcode}
+                onChange={updateField("destinationPostcode")}
+                list="request-address-suggestions"
+                autoComplete="street-address"
+              />
+            </HeroInputField>
 
-            {/* Passengers */}
-            <label className="space-y-1 font-medium text-neutral-700">
-              Passengers
-              <div
-                className={`focus-within:border-secondary-600 mt-2 flex items-center gap-3 rounded-lg border bg-white px-4 py-3 shadow-md ${
-                  errors.passengers
-                    ? "border-red-700"
-                    : validFields.passengers
-                      ? "border-green-500"
-                      : "border-slate-100"
-                }`}
-              >
-                <Users size={16} />
-                <input
-                  type="number"
-                  min={1}
-                  value={form.passengers}
-                  onChange={updateField("passengers")}
-                  className="w-full bg-transparent outline-none"
+            <HeroInputField
+              label="Passengers"
+              icon={<Users size={16} />}
+              error={errors.passengers}
+              valid={validFields.passengers}
+              suffix={
+                <FieldStateIcon
+                  error={errors.passengers}
+                  valid={validFields.passengers}
                 />
-                {errors.passengers && <CircleAlert className="text-red-600" />}
-                {validFields.passengers && (
-                  <CheckCircle className="text-green-600" />
-                )}
-              </div>
-              {errors.passengers && (
-                <p className="text-sm text-red-600">{errors.passengers}</p>
-              )}
-              {validFields.passengers && (
-                <p className="text-sm text-green-600">All set!</p>
-              )}
-            </label>
+              }
+            >
+              <HeroTextInput
+                type="number"
+                min={1}
+                value={form.passengers}
+                onChange={updateField("passengers")}
+              />
+            </HeroInputField>
 
-            {/* Luggage */}
-            <label className="space-y-1 font-medium text-neutral-700">
-              Luggage
-              <div
-                className={`focus-within:border-secondary-600 mt-2 flex items-center gap-3 rounded-lg border bg-white px-4 py-3 shadow-md ${
-                  errors.luggage
-                    ? "border-red-700"
-                    : validFields.luggage
-                      ? "border-green-500"
-                      : "border-slate-100"
-                }`}
-              >
-                <Briefcase size={16} />
-                <input
-                  type="number"
-                  min={0}
-                  value={form.luggage}
-                  onChange={updateField("luggage")}
-                  className="w-full bg-transparent outline-none"
+            <HeroInputField
+              label="Luggage"
+              icon={<Briefcase size={16} />}
+              error={errors.luggage}
+              valid={validFields.luggage}
+              suffix={
+                <FieldStateIcon
+                  error={errors.luggage}
+                  valid={validFields.luggage}
                 />
-                {validFields.luggage && (
-                  <CheckCircle className="text-green-600" />
-                )}
-              </div>
-            </label>
+              }
+            >
+              <HeroTextInput
+                type="number"
+                min={0}
+                value={form.luggage}
+                onChange={updateField("luggage")}
+              />
+            </HeroInputField>
           </div>
 
           {/* Submit */}
@@ -687,9 +529,11 @@ console.log("TEXT:", await res.text());
 
         {/* Hero Image */}
         <div className="relative hidden lg:block">
-          <img
-            src="/tower.png"
+          <Image
+            src="/tower.webp"
             alt="Trip Hero"
+            fill
+            sizes="(min-width: 1024px) 33vw, 0vw"
             className="h-full w-full object-cover"
           />
         </div>

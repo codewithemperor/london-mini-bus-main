@@ -7,32 +7,32 @@ import Link from "next/link";
 const reasons = [
   {
     title: "Comfortable Seats",
-    image: "/buses/inside-bus.png",
+    image: "/buses/inside-bus.webp",
     desc: "Our minibuses have clean, spacious, and well cushioned seats to keep every passenger comfortable throughout their trips.",
   },
   {
     title: "Professional Drivers",
-    image: "/services/driver.png",
+    image: "/services/driver.webp",
     desc: "Our professional and warm drivers uphold the highest standards of service, ensuring every trip runs smoothly and that you are comfortable during your trip.",
   },
   {
     title: "Customer Satisfaction",
-    image: "/services/customer.png",
+    image: "/services/customer.webp",
     desc: "Our services are built around your satisfaction. From your first call to the final drop-off, every step of your journey matters to us. ",
   },
   {
     title: "Ample Luggage Space",
-    image: "/services/luggage.png",
+    image: "/services/luggage.webp",
     desc: "Our minibuses offer plenty of space to safely store your luggage, thereby making every trip comfortable and easy. Proceed to make your booking with us.",
   },
   {
     title: "Child Friendly Travel",
-    image: "/services/child.png",
+    image: "/services/child.webp",
     desc: "Our minibuses are equipped with adjustable seat belts suitable for children aged 1 and above, which ensures a secure and comfortable ride for every passenger",
   },
   {
     title: "Baby Seats Available",
-    image: "/services/baby.png",
+    image: "/services/baby.webp",
     desc: "Your child’s comfort and safety matter to us. We offer baby seats for families on all trips. On request, our minibuses are equipped with safe baby seats.",
   },
 ];

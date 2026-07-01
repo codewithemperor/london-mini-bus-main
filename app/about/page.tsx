@@ -5,7 +5,7 @@ import FadeInSection from "@/utils/fade-in-section";
 import Head from "next/head";
 
 const AboutPage = () => {
-  const headerImg = "/about/header-image.png";
+  const headerImg = "/about/header-image.webp";
 
   return (
     <>

@@ -92,7 +92,7 @@ export async function POST(req: Request) {
             <tr>
               <td>
                 <img
-                  src="https://londonminibusrental.co.uk/buses/tower-bus.png"
+                  src="https://londonminibusrental.co.uk/buses/tower-bus.webp"
                   alt="London Minibus Rental"
                   width="600"
                   height="300"
@@ -368,7 +368,7 @@ export async function POST(req: Request) {
             <tr>
               <td valign="middle" style="padding-right: 6px;">
                 <img
-                  src="http://www.londonminibusrental.co.uk/icons/globe.png"
+                  src="http://www.londonminibusrental.co.uk/icons/globe.webp"
                   width="16"
                   height="16"
                   alt="Website"
@@ -402,7 +402,7 @@ export async function POST(req: Request) {
             <tr>
               <td valign="middle" style="padding-right: 6px;">
                 <img
-                  src="http://www.londonminibusrental.co.uk/icons/location.png"
+                  src="http://www.londonminibusrental.co.uk/icons/location.webp"
                   width="16"
                   height="16"
                   alt="Address"
@@ -427,7 +427,7 @@ export async function POST(req: Request) {
             <tr>
               <td valign="middle" style="padding-right: 6px;">
                 <img
-                  src="http://www.londonminibusrental.co.uk/icons/phone.png"
+                  src="http://www.londonminibusrental.co.uk/icons/phone.webp"
                   width="16"
                   height="16"
                   alt="Phone"

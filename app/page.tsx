@@ -66,7 +66,7 @@ const MainPage = () => {
         />
         <meta
           property="og:image"
-          content="https://www.londonminibusrental.co.uk/preview.jpg"
+          content="https://www.londonminibusrental.co.uk/buses/tower-bus.webp"
         />
 
         {/* Twitter */}
@@ -81,7 +81,7 @@ const MainPage = () => {
         />
         <meta
           name="twitter:image"
-          content="https://www.londonminibusrental.co.uk/preview.jpg"
+          content="https://www.londonminibusrental.co.uk/buses/tower-bus.webp"
         />
 
         {/* Structured Data */}

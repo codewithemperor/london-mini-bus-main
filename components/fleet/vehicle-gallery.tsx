@@ -15,10 +15,10 @@ export default function VehicleGallery({ car }: { car: string }) {
   const [activeIndex, setActiveIndex] = useState(0);
 
   const images: GalleryImage[] = [
-    { src: `/fleet/${car}/front.jpg`, alt: "Front view", id: 1 },
-    { src: `/fleet/${car}/rear.jpg`, alt: "Rear view", id: 2 },
-    { src: `/fleet/${car}/door.jpg`, alt: "Driver door", id: 3 },
-    { src: `/fleet/${car}/interior.jpg`, alt: "Interior seats", id: 4 },
+    { src: `/fleet/${car}/front.webp`, alt: "Front view", id: 1 },
+    { src: `/fleet/${car}/rear.webp`, alt: "Rear view", id: 2 },
+    { src: `/fleet/${car}/door.webp`, alt: "Driver door", id: 3 },
+    { src: `/fleet/${car}/interior.webp`, alt: "Interior seats", id: 4 },
   ];
 
   const prevImage = () => {
