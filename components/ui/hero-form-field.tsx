@@ -254,6 +254,9 @@ export function HeroDateTimePickerField({
     parsedValue,
   );
 
+  // Track if the user explicitly accepted the value via the "Accept" button
+  const isAccepting = React.useRef(false);
+
   React.useEffect(() => {
     setPendingValue(parseGMTDateTime(value, timeValue));
   }, [timeValue, value]);
@@ -288,12 +291,21 @@ export function HeroDateTimePickerField({
             return false;
           }}
           onOpen={() => {
+            isAccepting.current = false;
             setPendingValue(parsedValue);
           }}
           onChange={(nextValue) => setPendingValue(nextValue)}
           onAccept={(nextValue) => {
+            isAccepting.current = true; // Mark as explicitly accepted
             setPendingValue(nextValue);
             onChange(getDateTimeParts(nextValue));
+          }}
+          onClose={() => {
+            // Safety net: if dismissed WITHOUT accepting, revert the visual state
+            if (!isAccepting.current) {
+              setPendingValue(parsedValue);
+            }
+            isAccepting.current = false;
           }}
           minutesStep={15}
           format="DD/MM/YYYY hh:mm A"
@@ -343,6 +355,13 @@ export function HeroDateTimePickerField({
             },
             mobilePaper: {
               "aria-label": label,
+            },
+            dialog: {
+              // Force the user to click Cancel or Next/Accept
+              disableEscapeKeyDown: true,
+              onClose: (_event: unknown, reason: string) => {
+                if (reason === "backdropClick") return; // Swallow backdrop clicks
+              },
             },
             actionBar: {
               actions: ["cancel", "nextOrAccept"],
