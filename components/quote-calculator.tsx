@@ -3,23 +3,13 @@
 import {
   calculateMileage,
   calculateTimeCost,
-  calculateTimeDifference,
   normalizeLocation,
 } from "@/utils/quote-helpers";
 import { QuoteFormState } from "@/types/form";
-import {
-  Calculator,
-  Clock,
-  Info,
-  MapPin,
-  RotateCcw,
-} from "lucide-react";
-import {
-  HeroDatePickerField,
-  HeroInputField,
-  HeroNativeSelect,
-  HeroTextInput,
-} from "@/components/ui/hero-form-field";
+import { Button, Spinner } from "@heroui/react";
+import { Calculator, RotateCcw } from "lucide-react";
+import { HeroDateTimePickerField } from "@/components/ui/hero-form-field";
+import { LocationAutocompleteField } from "@/components/ui/location-autocomplete-field";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import React, { useMemo, useState } from "react";
@@ -33,43 +23,14 @@ type FormState = {
   pickupTime: string;
   returnTime: string;
   pickupDate: string;
+  returnDate: string;
   pickupLocation: string;
   dropoffLocation: string;
 };
 
 type RequiredFieldKey = Exclude<keyof FormState, "tripType">;
 
-const ADDRESS_SUGGESTIONS = [
-  "Heathrow Airport, Hounslow",
-  "Gatwick Airport, Horley",
-  "Stansted Airport, Stansted",
-  "Luton Airport, Luton",
-  "London City Airport, London",
-  "King's Cross Station, London",
-  "Victoria Coach Station, London",
-  "Waterloo Station, London",
-  "Wembley Stadium, London",
-  "The O2, London",
-  "SW1A 1AA",
-  "SE15 2UQ",
-  "E20 2ST",
-];
-
-const timeOptions = Array.from({ length: 24 * 4 }, (_, i) => {
-  const totalMinutes = i * 15;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  const value = `${hours.toString().padStart(2, "0")}:${minutes
-    .toString()
-    .padStart(2, "0")}`;
-  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
-  const period = hours < 12 ? "AM" : "PM";
-
-  return {
-    value,
-    label: `${hour12}:${minutes.toString().padStart(2, "0")} ${period}`,
-  };
-});
+const UK_TIME_ZONE = "Europe/London";
 
 const formatDateForDisplay = (value: string) => {
   if (!value) return "";
@@ -79,13 +40,124 @@ const formatDateForDisplay = (value: string) => {
 
 const money = (amount: number) => `£${amount.toFixed(2)}`;
 
+/**
+ * --- Timezone helpers ---
+ *
+ * The UK switches between GMT (UTC+0) and BST (UTC+1) twice a year.
+ * Rather than hardcode DST rules, we ask the JS Intl API what the
+ * offset actually is for any given instant, using the IANA "Europe/London"
+ * database — this is always correct, including on the exact days the
+ * clocks change.
+ */
+
+// Returns the UK's offset from UTC, in minutes, for a given UTC instant.
+// Positive = UK is ahead of UTC (BST), 0 = UK matches UTC (GMT).
+const getUkOffsetMinutes = (utcDate: Date) => {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: UK_TIME_ZONE,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  const parts = dtf.formatToParts(utcDate).reduce<Record<string, string>>(
+    (acc, part) => {
+      if (part.type !== "literal") acc[part.type] = part.value;
+      return acc;
+    },
+    {},
+  );
+
+  const asIfUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute),
+    Number(parts.second),
+  );
+
+  return (asIfUtc - utcDate.getTime()) / 60000;
+};
+
+// Converts a UK "wall clock" date + time (what the user picked, e.g.
+// "2026-07-15" / "14:00") into a real UTC timestamp (ms since epoch),
+// correctly accounting for whether that date falls in GMT or BST.
+const ukWallTimeToUtcMs = (date: string, time: string): number | null => {
+  if (!date || !time) return null;
+
+  // First, parse as if it were already UTC — this gives us an instant
+  // close enough to the target to correctly look up the UK offset.
+  const naiveUtcMs = Date.parse(`${date}T${time}:00Z`);
+  if (Number.isNaN(naiveUtcMs)) return null;
+
+  const offsetMinutes = getUkOffsetMinutes(new Date(naiveUtcMs));
+
+  // The user meant this time IN THE UK, so the true UTC instant is
+  // the naive value shifted back by the UK's offset.
+  return naiveUtcMs - offsetMinutes * 60000;
+};
+
+// Converts a real UTC instant into UK wall-clock date/time strings
+// (for display, and for pre-filling the "next available hour").
+const utcMsToUkWallTime = (utcMs: number) => {
+  const dtf = new Intl.DateTimeFormat("en-CA", {
+    timeZone: UK_TIME_ZONE,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const parts = dtf.formatToParts(new Date(utcMs)).reduce<Record<string, string>>(
+    (acc, part) => {
+      if (part.type !== "literal") acc[part.type] = part.value;
+      return acc;
+    },
+    {},
+  );
+
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`, // en-CA gives YYYY-MM-DD
+    time: `${parts.hour}:${parts.minute}`,
+  };
+};
+
+// Next available pickup slot: rounds "now" up to the next full hour.
+// Hour boundaries are the same instant everywhere, so we round in UTC,
+// then just format that instant as UK wall-clock time for display.
+const getNextUkHour = () => {
+  const now = new Date();
+  now.setUTCMinutes(0, 0, 0);
+  now.setUTCHours(now.getUTCHours() + 1);
+  return utcMsToUkWallTime(now.getTime());
+};
+
+// Replaces the old getDateTimeMs — now timezone-aware.
+const getUkDateTimeMs = (date: string, time: string) => ukWallTimeToUtcMs(date, time);
+
+const formatDuration = (totalMinutes: number) => {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  return {
+    hours,
+    minutes,
+    hoursDecimal: Number((totalMinutes / 60).toFixed(2)),
+  };
+};
+
 export default function QuoteCalculator() {
   const [openQuote, setOpenQuote] = useState(false);
   const [openSuccess, setOpenSuccess] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
-  const [errors, setErrors] = useState<
-    Partial<Record<RequiredFieldKey, string>>
-  >({});
+  const [errors, setErrors] = useState<Partial<Record<RequiredFieldKey, string>>>({});
 
   const [fullData, setFullData] = useState<QuoteFormState>({
     tripType: "return",
@@ -106,13 +178,15 @@ export default function QuoteCalculator() {
     pickupTime: "",
     returnTime: "",
     pickupDate: "",
+    returnDate: "",
     pickupLocation: "",
     dropoffLocation: "",
   });
 
   const router = useRouter();
 
-  const minPickupDate = useMemo(() => new Date().toISOString().split("T")[0], []);
+  // Recomputed on mount; represents "the next full hour, in UK time"
+  const minimumPickupDateTime = useMemo(() => getNextUkHour(), []);
 
   const handleChange = (key: keyof FormState, value: string) => {
     setForm((state) => ({ ...state, [key]: value }));
@@ -128,10 +202,36 @@ export default function QuoteCalculator() {
       pickupTime: "",
       returnTime: "",
       pickupDate: "",
+      returnDate: "",
       pickupLocation: "",
       dropoffLocation: "",
     });
     setErrors({});
+  };
+
+  const isCalculateReady =
+    form.pickupLocation.trim() !== "" &&
+    form.dropoffLocation.trim() !== "" &&
+    form.pickupDate !== "" &&
+    form.pickupTime !== "" &&
+    form.returnDate !== "" &&
+    form.returnTime !== "";
+
+  const handleDateTimeChange = (
+    dateField: "pickupDate" | "returnDate",
+    timeField: "pickupTime" | "returnTime",
+    value: { date: string; time: string },
+  ) => {
+    setForm((state) => ({
+      ...state,
+      [dateField]: value.date,
+      [timeField]: value.time,
+    }));
+    setErrors((prev) => ({
+      ...prev,
+      [dateField]: undefined,
+      [timeField]: undefined,
+    }));
   };
 
   const sendEmail = async () => {
@@ -182,15 +282,41 @@ export default function QuoteCalculator() {
     }
 
     if (!form.pickupDate) {
-      newErrors.pickupDate = "Pickup date is required";
+      newErrors.pickupDate = "Pick up date and time is required";
     }
 
     if (!form.pickupTime) {
-      newErrors.pickupTime = "Pick up time is required";
+      newErrors.pickupTime = "Pick up date and time is required";
+    }
+
+    if (!form.returnDate) {
+      newErrors.returnDate = "Return date and time is required";
     }
 
     if (!form.returnTime) {
-      newErrors.returnTime = "Return time is required";
+      newErrors.returnTime = "Return date and time is required";
+    }
+
+    // All comparisons now happen on true UTC instants derived from
+    // UK wall-clock input, so GMT/BST transitions can't cause an
+    // off-by-one-hour bug around the pickup/return validity checks.
+    const minimumPickupMs = ukWallTimeToUtcMs(
+      minimumPickupDateTime.date,
+      minimumPickupDateTime.time,
+    );
+    const pickupMs = getUkDateTimeMs(form.pickupDate, form.pickupTime);
+    const returnMs = getUkDateTimeMs(form.returnDate, form.returnTime);
+
+    if (
+      pickupMs !== null &&
+      minimumPickupMs !== null &&
+      pickupMs < minimumPickupMs
+    ) {
+      newErrors.pickupDate = "Pick up must be in the future";
+    }
+
+    if (pickupMs !== null && returnMs !== null && returnMs <= pickupMs) {
+      newErrors.returnDate = "Return must be after pick up";
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -205,7 +331,10 @@ export default function QuoteCalculator() {
     const dropoffLocation = normalizeLocation(form.dropoffLocation);
 
     try {
-      const mileageResult = await calculateMileage(pickupLocation, dropoffLocation);
+      const mileageResult = await calculateMileage(
+        pickupLocation,
+        dropoffLocation,
+      );
       const MILE_RATE = 1.7;
 
       if (!mileageResult || typeof mileageResult.distanceMiles !== "number") {
@@ -215,9 +344,15 @@ export default function QuoteCalculator() {
       const mileageCost = Number(
         (mileageResult.distanceMiles * MILE_RATE).toFixed(2),
       );
-      const timeResult = calculateTimeDifference(
-        form.pickupTime,
-        form.returnTime,
+      const pickupMs = getUkDateTimeMs(form.pickupDate, form.pickupTime);
+      const returnMs = getUkDateTimeMs(form.returnDate, form.returnTime);
+
+      if (pickupMs === null || returnMs === null || returnMs <= pickupMs) {
+        throw new Error("Invalid date/time range");
+      }
+
+      const timeResult = formatDuration(
+        Math.round((returnMs - pickupMs) / 60000),
       );
       const billableHours = Math.max(timeResult.hoursDecimal, 4);
       const timeCost = calculateTimeCost(timeResult.hoursDecimal);
@@ -230,7 +365,7 @@ export default function QuoteCalculator() {
       setFullData({
         tripType: form.tripType,
         pickupTime: form.pickupTime,
-        returnTime: form.returnTime,
+        returnTime: `${formatDateForDisplay(form.returnDate)} ${form.returnTime}`,
         pickupDate: formatDateForDisplay(form.pickupDate),
         pickupPostcode: pickupLocation,
         dropoffPostcode: dropoffLocation,
@@ -294,123 +429,78 @@ export default function QuoteCalculator() {
               ))}
             </div>
 
-            <datalist id="calculator-address-suggestions">
-              {ADDRESS_SUGGESTIONS.map((suggestion) => (
-                <option key={suggestion} value={suggestion} />
-              ))}
-            </datalist>
-
             <div className="space-y-5">
-              <HeroInputField
-                label="Pick up time"
-                icon={<Clock size={18} />}
-                error={errors.pickupTime}
-                tone="light"
-              >
-                <HeroNativeSelect
-                  value={form.pickupTime}
-                  onChange={(e) => handleChange("pickupTime", e.target.value)}
-                  className={
-                    !form.pickupTime ? "text-slate-400" : "text-black"
-                  }
-                >
-                  <option value="">Select time</option>
-                  {timeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </HeroNativeSelect>
-              </HeroInputField>
-
-              <HeroInputField
-                label={
-                  <span className="flex items-center gap-2">
-                    Return time
-                    <span className="group relative inline-flex items-center">
-                      <Info size={14} className="text-slate-400" />
-                      <span className="pointer-events-none absolute top-full left-1/2 z-10 mt-2 w-max max-w-56 -translate-x-1/2 rounded-md bg-neutral-900 px-3 py-1.5 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
-                        Time for your trip completion
-                      </span>
-                    </span>
-                  </span>
+              <HeroDateTimePickerField
+                label="Pick up date and time (UK time)"
+                value={form.pickupDate}
+                timeValue={form.pickupTime}
+                onChange={(value) =>
+                  handleDateTimeChange("pickupDate", "pickupTime", value)
                 }
-                icon={<Clock size={18} />}
-                error={errors.returnTime}
+                error={errors.pickupDate || errors.pickupTime}
                 tone="light"
-              >
-                <HeroNativeSelect
-                  value={form.returnTime}
-                  onChange={(e) => handleChange("returnTime", e.target.value)}
-                  className={
-                    !form.returnTime ? "text-slate-400" : "text-black"
-                  }
-                >
-                  <option value="">Select time</option>
-                  {timeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </HeroNativeSelect>
-              </HeroInputField>
+                minDateTime={minimumPickupDateTime}
+              />
 
-              <HeroInputField
+              <HeroDateTimePickerField
+                label="Return date and time (UK time)"
+                value={form.returnDate}
+                timeValue={form.returnTime}
+                onChange={(value) =>
+                  handleDateTimeChange("returnDate", "returnTime", value)
+                }
+                error={errors.returnDate || errors.returnTime}
+                tone="light"
+                minDateTime={
+                  form.pickupDate && form.pickupTime
+                    ? { date: form.pickupDate, time: form.pickupTime }
+                    : minimumPickupDateTime
+                }
+              />
+
+              <LocationAutocompleteField
                 label="Pick up address or postcode"
-                icon={<MapPin size={18} />}
+                placeholder="Select pickup location"
+                searchPlaceholder="Search pickup address or postcode..."
+                value={form.pickupLocation}
+                onChange={(value) => handleChange("pickupLocation", value)}
                 error={errors.pickupLocation}
                 tone="light"
-              >
-                <HeroTextInput
-                  value={form.pickupLocation}
-                  onChange={(e) => handleChange("pickupLocation", e.target.value)}
-                  placeholder="e.g. Heathrow Airport or SW1A 1AA"
-                  list="calculator-address-suggestions"
-                  autoComplete="street-address"
-                />
-              </HeroInputField>
+              />
 
-              <HeroInputField
+              <LocationAutocompleteField
                 label="Drop off address or postcode"
-                icon={<MapPin size={18} />}
+                placeholder="Select drop off location"
+                searchPlaceholder="Search drop off address or postcode..."
+                value={form.dropoffLocation}
+                onChange={(value) => handleChange("dropoffLocation", value)}
                 error={errors.dropoffLocation}
-                tone="light"
-              >
-                <HeroTextInput
-                  value={form.dropoffLocation}
-                  onChange={(e) =>
-                    handleChange("dropoffLocation", e.target.value)
-                  }
-                  placeholder="e.g. Wembley Stadium or E20 2ST"
-                  list="calculator-address-suggestions"
-                  autoComplete="street-address"
-                />
-              </HeroInputField>
-
-              <HeroDatePickerField
-                label="Pickup date"
-                value={form.pickupDate}
-                minValue={minPickupDate}
-                onChange={(value) => handleChange("pickupDate", value)}
-                error={errors.pickupDate}
                 tone="light"
               />
 
               <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={handleCalculate}
-                  disabled={isCalculating}
-                  className="bg-primary-700 hover:text-primary-700 hover:bg-primary-50 flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-3 font-semibold text-white shadow-md transition hover:border hover:shadow-lg disabled:cursor-wait disabled:opacity-70"
+                <Button
+                  isDisabled={!isCalculateReady || isCalculating}
+                  isPending={isCalculating}
+                  onPress={handleCalculate}
+                  className="bg-primary-700 hover:text-primary-700 hover:bg-primary-50 flex h-14 min-h-14 flex-1 items-center justify-center gap-2 rounded-xl px-6 py-0 font-semibold text-white shadow-md transition hover:border hover:shadow-lg disabled:cursor-wait disabled:opacity-70"
                 >
-                  <Calculator size={18} />
-                  {isCalculating ? "Calculating..." : "Calculate Quote"}
-                </button>
+                  {({ isPending }) => (
+                    <>
+                      {isPending ? (
+                        <Spinner color="current" size="sm" />
+                      ) : (
+                        <Calculator size={18} />
+                      )}
+                      {isPending ? "Calculating..." : "Calculate Quote"}
+                    </>
+                  )}
+                </Button>
 
                 <button
                   type="button"
                   onClick={handleReset}
-                  className="border-primary/50 hover:border-primary text-primary-700 flex flex-1 items-center justify-center gap-2 rounded-xl border px-6 py-3 font-semibold sm:flex-none"
+                  className="border-primary/50 hover:border-primary text-primary-700 flex h-14 min-h-14 flex-1 items-center justify-center gap-2 rounded-xl border px-6 py-0 font-semibold sm:flex-none"
                 >
                   <RotateCcw size={18} />
                   Reset

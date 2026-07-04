@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import nodemailer from "nodemailer";
+import { sendEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -30,20 +30,11 @@ export async function POST(req: Request) {
     const serverTotalCost = Number.isFinite(parsedTotal)
       ? `£${(tripType === "oneway" ? parsedTotal * 2 : parsedTotal).toFixed(2)}`
       : totalCost;
-    const tripTypeLabel = tripType === "oneway" ? "One Way Trip" : "Return Trip";
-
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT),
-      secure: true, // 465
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
+    const tripTypeLabel =
+      tripType === "oneway" ? "One Way Trip" : "Return Trip";
 
     /* ---------------- CUSTOMER EMAIL ---------------- */
-    await transporter.sendMail({
+    await sendEmail({
       from: `"Quote Estimate" <info@londonminibusrental.co.uk>`,
       to: email,
       subject: "Your Trip Quote Estimate",
@@ -331,7 +322,7 @@ export async function POST(req: Request) {
     });
 
     /* ---------------- COMPANY EMAIL ---------------- */
-    await transporter.sendMail({
+    await sendEmail({
       from: `"Quote Estimate London Minibus" <info@londonminibusrental.co.uk>`,
       to: "info@londonminibusrental.co.uk",
       subject: "New Estimate Calculated",

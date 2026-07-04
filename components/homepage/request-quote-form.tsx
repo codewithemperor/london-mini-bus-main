@@ -1,38 +1,111 @@
 "use client";
-import {
-  Briefcase,
-  Clock,
-  Mail,
-  MapPin,
-  Phone,
-  Users,
-} from "lucide-react";
+import { Button, Spinner } from "@heroui/react";
+import { Briefcase, Mail, Phone, Users } from "lucide-react";
 import {
   FieldStateIcon,
-  HeroDatePickerField,
+  HeroDateTimePickerField,
   HeroInputField,
-  HeroNativeSelect,
   HeroTextInput,
 } from "@/components/ui/hero-form-field";
+import { LocationAutocompleteField } from "@/components/ui/location-autocomplete-field";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import React, { useState } from "react";
 
-const ADDRESS_SUGGESTIONS = [
-  "Heathrow Airport, Hounslow",
-  "Gatwick Airport, Horley",
-  "Stansted Airport, Stansted",
-  "Luton Airport, Luton",
-  "London City Airport, London",
-  "King's Cross Station, London",
-  "Victoria Coach Station, London",
-  "Waterloo Station, London",
-  "Wembley Stadium, London",
-  "The O2, London",
-  "SW1A 1AA",
-  "SE15 2UQ",
-  "E20 2ST",
-];
+const UK_TIME_ZONE = "Europe/London";
+
+/**
+ * --- Timezone helpers ---
+ *
+ * The UK switches between GMT (UTC+0) and BST (UTC+1) twice a year.
+ * Rather than hardcode DST rules, we ask the JS Intl API what the
+ * offset actually is for any given instant, using the IANA "Europe/London"
+ * database — this is always correct, including on the exact days the
+ * clocks change.
+ */
+
+// Returns the UK's offset from UTC, in minutes, for a given UTC instant.
+// Positive = UK is ahead of UTC (BST), 0 = UK matches UTC (GMT).
+const getUkOffsetMinutes = (utcDate: Date) => {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: UK_TIME_ZONE,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  const parts = dtf
+    .formatToParts(utcDate)
+    .reduce<Record<string, string>>((acc, part) => {
+      if (part.type !== "literal") acc[part.type] = part.value;
+      return acc;
+    }, {});
+
+  const asIfUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute),
+    Number(parts.second),
+  );
+
+  return (asIfUtc - utcDate.getTime()) / 60000;
+};
+
+// Converts a UK "wall clock" date + time (what the user picked, e.g.
+// "2026-07-15" / "14:00") into a real UTC timestamp (ms since epoch),
+// correctly accounting for whether that date falls in GMT or BST.
+const ukWallTimeToUtcMs = (date: string, time: string): number | null => {
+  if (!date || !time) return null;
+
+  const naiveUtcMs = Date.parse(`${date}T${time}:00Z`);
+  if (Number.isNaN(naiveUtcMs)) return null;
+
+  const offsetMinutes = getUkOffsetMinutes(new Date(naiveUtcMs));
+
+  return naiveUtcMs - offsetMinutes * 60000;
+};
+
+// Converts a real UTC instant into UK wall-clock date/time strings
+// (for display, and for pre-filling the "next available hour").
+const utcMsToUkWallTime = (utcMs: number) => {
+  const dtf = new Intl.DateTimeFormat("en-CA", {
+    timeZone: UK_TIME_ZONE,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const parts = dtf
+    .formatToParts(new Date(utcMs))
+    .reduce<Record<string, string>>((acc, part) => {
+      if (part.type !== "literal") acc[part.type] = part.value;
+      return acc;
+    }, {});
+
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    time: `${parts.hour}:${parts.minute}`,
+  };
+};
+
+// Next available pickup slot: rounds "now" up to the next full hour.
+// Hour boundaries are the same instant everywhere, so we round in UTC,
+// then just format that instant as UK wall-clock time for display.
+const getNextUkHour = () => {
+  const now = new Date();
+  now.setUTCMinutes(0, 0, 0);
+  now.setUTCHours(now.getUTCHours() + 1);
+  return utcMsToUkWallTime(now.getTime());
+};
 
 const RequestQuoteForm = () => {
   const [tripType, setTripType] = useState<"return" | "oneway">("return");
@@ -57,6 +130,11 @@ const RequestQuoteForm = () => {
   const [validFields, setValidFields] = useState<
     Partial<Record<keyof typeof form, boolean>>
   >({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Computed once (not on every render) since "now" only needs to be
+  // fresh at mount time for the min-pickup constraint.
+  const [minimumPickupDateTime] = useState(() => getNextUkHour());
 
   const updateTripType = (nextTripType: "return" | "oneway") => {
     setTripType(nextTripType);
@@ -90,6 +168,92 @@ const RequestQuoteForm = () => {
     );
   };
 
+  // Replaces the old naive getDateTimeMs — now timezone-aware, treating
+  // the input as UK wall-clock time rather than literal UTC.
+  const getDateTimeMs = (date: string, time: string) =>
+    ukWallTimeToUtcMs(date, time);
+
+  const setDateTimeValue = (
+    dateField: "pickupDate" | "returnDate",
+    timeField: "pickupTime" | "returnTime",
+    value: { date: string; time: string },
+  ) => {
+    setForm((prev) => ({
+      ...prev,
+      [dateField]: value.date,
+      [timeField]: value.time,
+    }));
+
+    setErrors((prev) => ({
+      ...prev,
+      [dateField]: undefined,
+      [timeField]: undefined,
+    }));
+
+    setValidFields((prev) => ({
+      ...prev,
+      [dateField]: value.date !== "" && value.time !== "",
+      [timeField]: value.date !== "" && value.time !== "",
+    }));
+  };
+
+  const getFormErrors = () => {
+    const newErrors: Partial<Record<keyof typeof form, string>> = {};
+    const minimumPickupMs = ukWallTimeToUtcMs(
+      minimumPickupDateTime.date,
+      minimumPickupDateTime.time,
+    );
+    const pickupMs = getDateTimeMs(form.pickupDate, form.pickupTime);
+    const returnMs = getDateTimeMs(form.returnDate, form.returnTime);
+
+    if (!form.phone.trim() || form.phone.length < 6) {
+      newErrors.phone = "Phone number is required";
+    }
+
+    if (!form.email.trim()) {
+      newErrors.email = "Email address is required";
+    } else if (!/^\S+@\S+\.\S+$/.test(form.email)) {
+      newErrors.email = "Enter a valid email address";
+    }
+
+    if (!form.pickupDate || !form.pickupTime) {
+      newErrors.pickupDate = "Pick up date and time is required";
+    } else if (!isValidISODate(form.pickupDate) || pickupMs === null) {
+      newErrors.pickupDate = "Enter a valid pick up date and time";
+    } else if (minimumPickupMs !== null && pickupMs < minimumPickupMs) {
+      newErrors.pickupDate = "Pick up must be in the future";
+    }
+
+    if (tripType === "return") {
+      if (!form.returnDate || !form.returnTime) {
+        newErrors.returnDate = "Return date and time is required";
+      } else if (!isValidISODate(form.returnDate) || returnMs === null) {
+        newErrors.returnDate = "Enter a valid return date and time";
+      } else if (pickupMs !== null && returnMs <= pickupMs) {
+        newErrors.returnDate = "Return must be after pick up";
+      }
+    }
+
+    if (!form.pickupPostcode.trim()) {
+      newErrors.pickupPostcode = "Pick up address or postcode is required";
+    }
+
+    if (!form.destinationPostcode.trim()) {
+      newErrors.destinationPostcode =
+        "Destination address or postcode is required";
+    }
+
+    if (!form.passengers || Number(form.passengers) < 1) {
+      newErrors.passengers = "At least 1 passenger is required";
+    }
+
+    if (Number(form.luggage) < 0) {
+      newErrors.luggage = "Luggage cannot be negative";
+    }
+
+    return newErrors;
+  };
+
   const validateField = (field: keyof typeof form, value: string) => {
     let error: string | undefined;
 
@@ -105,18 +269,18 @@ const RequestQuoteForm = () => {
           error = "Enter a valid email address";
         break;
       case "pickupDate":
-        if (!value) {
-          error = "Pick up date is required";
+        if (!value || !form.pickupTime) {
+          error = "Pick up date and time is required";
         } else if (!isValidISODate(value)) {
-          error = "Enter a valid pick up date";
+          error = "Enter a valid pick up date and time";
         }
         break;
 
       case "returnDate":
-        if (tripType === "return" && !value) {
-          error = "Return date is required";
+        if (tripType === "return" && (!value || !form.returnTime)) {
+          error = "Return date and time is required";
         } else if (tripType === "return" && !isValidISODate(value)) {
-          error = "Enter a valid return date";
+          error = "Enter a valid return date and time";
         }
         break;
 
@@ -133,7 +297,8 @@ const RequestQuoteForm = () => {
         break;
 
       case "destinationPostcode":
-        if (!value.trim()) error = "Destination address or postcode is required";
+        if (!value.trim())
+          error = "Destination address or postcode is required";
         break;
 
       case "passengers":
@@ -150,49 +315,7 @@ const RequestQuoteForm = () => {
   };
 
   const validateForm = () => {
-    const newErrors: Partial<Record<keyof typeof form, string>> = {};
-
-    if (!form.phone.trim() || form.phone.length < 6) {
-      newErrors.phone = "Phone number is required";
-    }
-
-    if (!form.email.trim()) {
-      newErrors.email = "Email address is required";
-    } else if (!/^\S+@\S+\.\S+$/.test(form.email)) {
-      newErrors.email = "Enter a valid email address";
-    }
-
-    if (!form.pickupDate) {
-      newErrors.pickupDate = "Pick up date is required";
-    } else if (!isValidISODate(form.pickupDate)) {
-      newErrors.pickupDate = "Enter a valid pick up date";
-    }
-
-    if (tripType === "return" && !form.returnDate) {
-      newErrors.returnDate = "Return date is required";
-    } else if (tripType === "return" && !isValidISODate(form.returnDate)) {
-      newErrors.returnDate = "Enter a valid return date";
-    }
-
-    if (!form.pickupTime) {
-      newErrors.pickupTime = "Pick up time is required";
-    }
-
-    if (tripType === "return" && !form.returnTime) {
-      newErrors.returnTime = "Return time is required";
-    }
-
-    if (!form.pickupPostcode.trim()) {
-      newErrors.pickupPostcode = "Pick up address or postcode is required";
-    }
-
-    if (!form.destinationPostcode.trim()) {
-      newErrors.destinationPostcode = "Destination address or postcode is required";
-    }
-
-    if (!form.passengers || Number(form.passengers) < 1) {
-      newErrors.passengers = "At least 1 passenger is required";
-    }
+    const newErrors = getFormErrors();
 
     setErrors(newErrors);
 
@@ -206,39 +329,63 @@ const RequestQuoteForm = () => {
     };
 
   const setFieldValue = (field: keyof typeof form, value: string) => {
-      setForm((prev) => ({ ...prev, [field]: value }));
+    setForm((prev) => ({ ...prev, [field]: value }));
 
-      const error = validateField(field, value);
+    const error = validateField(field, value);
 
-      setErrors((prev) => ({
-        ...prev,
-        [field]: error,
-      }));
+    setErrors((prev) => ({
+      ...prev,
+      [field]: error,
+    }));
 
-      setValidFields((prev) => ({
-        ...prev,
-        [field]: !error && value.trim() !== "",
-      }));
+    setValidFields((prev) => ({
+      ...prev,
+      [field]: !error && value.trim() !== "",
+    }));
   };
+
+  const formErrors = getFormErrors();
+  const pickupDateTimeError =
+    errors.pickupDate ||
+    errors.pickupTime ||
+    (form.pickupDate && form.pickupTime
+      ? formErrors.pickupDate || formErrors.pickupTime
+      : undefined);
+  const returnDateTimeError =
+    errors.returnDate ||
+    errors.returnTime ||
+    (form.returnDate && form.returnTime
+      ? formErrors.returnDate || formErrors.returnTime
+      : undefined);
+  const isFormReady = Object.keys(formErrors).length === 0;
 
   const handleSubmit = async () => {
     const isValid = validateForm();
 
     if (!isValid) return;
 
-    const res = await fetch("/api/request-quote", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tripType,
-        ...form,
-      }),
-    });
+    setIsSubmitting(true);
 
-    if (res.ok) {
-      router.push("/success");
-    } else {
+    try {
+      const res = await fetch("/api/request-quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tripType,
+          ...form,
+        }),
+      });
+
+      if (res.ok) {
+        router.push("/success");
+      } else {
+        router.push("/error");
+      }
+    } catch (error) {
+      console.error(error);
       router.push("/error");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -270,12 +417,6 @@ const RequestQuoteForm = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:px-6 lg:grid-cols-3">
-        <datalist id="request-address-suggestions">
-          {ADDRESS_SUGGESTIONS.map((suggestion) => (
-            <option key={suggestion} value={suggestion} />
-          ))}
-        </datalist>
-
         {/* Form */}
         <div className="col-span-2 flex h-full flex-col justify-between rounded-xl bg-indigo-50 px-5 py-12 shadow-lg sm:rounded-none sm:px-8 sm:shadow-none">
           <div>
@@ -294,7 +435,10 @@ const RequestQuoteForm = () => {
               error={errors.phone}
               valid={validFields.phone}
               suffix={
-                <FieldStateIcon error={errors.phone} valid={validFields.phone} />
+                <FieldStateIcon
+                  error={errors.phone}
+                  valid={validFields.phone}
+                />
               }
             >
               <HeroTextInput
@@ -311,7 +455,10 @@ const RequestQuoteForm = () => {
               error={errors.email}
               valid={validFields.email}
               suffix={
-                <FieldStateIcon error={errors.email} valid={validFields.email} />
+                <FieldStateIcon
+                  error={errors.email}
+                  valid={validFields.email}
+                />
               }
             >
               <HeroTextInput
@@ -322,160 +469,63 @@ const RequestQuoteForm = () => {
               />
             </HeroInputField>
 
-            <HeroDatePickerField
-              label="Pick up date"
+            <HeroDateTimePickerField
+              label="Pick up date and time (UK time)"
               value={form.pickupDate}
-              onChange={(value) => setFieldValue("pickupDate", value)}
-              error={errors.pickupDate}
-              valid={validFields.pickupDate}
+              timeValue={form.pickupTime}
+              onChange={(value) =>
+                setDateTimeValue("pickupDate", "pickupTime", value)
+              }
+              error={pickupDateTimeError}
+              valid={
+                validFields.pickupDate &&
+                validFields.pickupTime &&
+                !pickupDateTimeError
+              }
+              minDateTime={minimumPickupDateTime}
             />
 
             {tripType === "return" && (
-              <HeroDatePickerField
-                label="Return date"
+              <HeroDateTimePickerField
+                label="Return date and time (UK time)"
                 value={form.returnDate}
-                onChange={(value) => setFieldValue("returnDate", value)}
-                error={errors.returnDate}
-                valid={validFields.returnDate}
+                timeValue={form.returnTime}
+                onChange={(value) =>
+                  setDateTimeValue("returnDate", "returnTime", value)
+                }
+                error={returnDateTimeError}
+                valid={
+                  validFields.returnDate &&
+                  validFields.returnTime &&
+                  !returnDateTimeError
+                }
+                minDateTime={
+                  form.pickupDate && form.pickupTime
+                    ? { date: form.pickupDate, time: form.pickupTime }
+                    : minimumPickupDateTime
+                }
               />
             )}
 
-            <HeroInputField
-              label="Pick up time"
-              icon={<Clock size={16} />}
-              error={errors.pickupTime}
-              valid={validFields.pickupTime}
-              suffix={
-                <FieldStateIcon
-                  error={errors.pickupTime}
-                  valid={validFields.pickupTime}
-                />
-              }
-            >
-              <HeroNativeSelect
-                value={form.pickupTime}
-                onChange={updateField("pickupTime")}
-                className={!form.pickupTime ? "text-slate-500" : "text-black"}
-              >
-                <option value="">Select time</option>
-                {Array.from({ length: 24 }, (_, h) => {
-                  const value = `${h.toString().padStart(2, "0")}:00`;
-                  const hour12 = h % 12 === 0 ? 12 : h % 12;
-                  const period = h < 12 ? "AM" : "PM";
-
-                  return (
-                    <option key={value} value={value}>
-                      {hour12}:00 {period}
-                    </option>
-                  );
-                })}
-              </HeroNativeSelect>
-            </HeroInputField>
-
-            {/* Return time */}
-
-            {tripType === "return" && (
-              <HeroInputField
-                label={
-                  <div className="flex items-center gap-2">
-                    <span>Return time</span>
-                    <span className="group relative hidden items-center md:inline-flex">
-                      <svg
-                        className="h-4 w-4 cursor-pointer text-slate-400"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                        aria-hidden="true"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M18 10A8 8 0 11 2 10a8 8 0 0116 0zM9 9a1 1 0 012 0v4a1 1 0 11-2 0V9zm1-4a1.25 1.25 0 100 2.5A1.25 1.25 0 0010 5z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                      <span className="pointer-events-none absolute top-full left-1/2 z-10 mt-2 w-max -translate-x-1/2 rounded-md bg-neutral-900 px-3 py-1.5 text-xs text-white opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:block">
-                        This is the time you will arrive back to your pick up
-                        address after your trip is completed.
-                      </span>
-                    </span>
-                    <span className="justify-self-end text-right text-xs">
-                      (Time for your trip completion)
-                    </span>
-                  </div>
-                }
-                icon={<Clock size={16} />}
-                error={errors.returnTime}
-                valid={validFields.returnTime}
-                suffix={
-                  <FieldStateIcon
-                    error={errors.returnTime}
-                    valid={validFields.returnTime}
-                  />
-                }
-              >
-                <HeroNativeSelect
-                  value={form.returnTime}
-                  onChange={updateField("returnTime")}
-                  className={!form.returnTime ? "text-slate-500" : "text-black"}
-                >
-                  <option value="">Select time</option>
-                  {Array.from({ length: 24 }, (_, h) => {
-                    const value = `${h.toString().padStart(2, "0")}:00`;
-                    const hour12 = h % 12 === 0 ? 12 : h % 12;
-                    const period = h < 12 ? "AM" : "PM";
-
-                    return (
-                      <option key={value} value={value}>
-                        {hour12}:00 {period}
-                      </option>
-                    );
-                  })}
-                </HeroNativeSelect>
-              </HeroInputField>
-            )}
-
-            <HeroInputField
+            <LocationAutocompleteField
               label="Pick up address or postcode"
-              icon={<MapPin size={16} />}
+              placeholder="Select pickup location"
+              searchPlaceholder="Search pickup address or postcode..."
+              value={form.pickupPostcode}
+              onChange={(value) => setFieldValue("pickupPostcode", value)}
               error={errors.pickupPostcode}
               valid={validFields.pickupPostcode}
-              suffix={
-                <FieldStateIcon
-                  error={errors.pickupPostcode}
-                  valid={validFields.pickupPostcode}
-                />
-              }
-            >
-              <HeroTextInput
-                type="text"
-                placeholder="Heathrow Airport or SE15 2UQ"
-                value={form.pickupPostcode}
-                onChange={updateField("pickupPostcode")}
-                list="request-address-suggestions"
-                autoComplete="street-address"
-              />
-            </HeroInputField>
+            />
 
-            <HeroInputField
+            <LocationAutocompleteField
               label="Destination address or postcode"
-              icon={<MapPin size={16} />}
+              placeholder="Select destination location"
+              searchPlaceholder="Search destination address or postcode..."
+              value={form.destinationPostcode}
+              onChange={(value) => setFieldValue("destinationPostcode", value)}
               error={errors.destinationPostcode}
               valid={validFields.destinationPostcode}
-              suffix={
-                <FieldStateIcon
-                  error={errors.destinationPostcode}
-                  valid={validFields.destinationPostcode}
-                />
-              }
-            >
-              <HeroTextInput
-                type="text"
-                placeholder="Wembley Stadium or E20 2ST"
-                value={form.destinationPostcode}
-                onChange={updateField("destinationPostcode")}
-                list="request-address-suggestions"
-                autoComplete="street-address"
-              />
-            </HeroInputField>
+            />
 
             <HeroInputField
               label="Passengers"
@@ -519,12 +569,19 @@ const RequestQuoteForm = () => {
           </div>
 
           {/* Submit */}
-          <button
-            onClick={handleSubmit}
-            className="bg-primary-700 hover:bg-primary-50 hover:text-primary-700 mt-8 w-3/5 self-center rounded-xl py-3 font-semibold text-white transition group-hover:shadow-lg hover:border hover:shadow-lg sm:w-full sm:text-lg"
+          <Button
+            isDisabled={!isFormReady || isSubmitting}
+            isPending={isSubmitting}
+            onPress={handleSubmit}
+            className="bg-primary-700 hover:bg-primary-50 hover:text-primary-700 mt-8 h-14 min-h-14 w-3/5 self-center rounded-xl py-0 font-semibold text-white transition group-hover:shadow-lg hover:border hover:shadow-lg disabled:opacity-60 sm:w-full sm:text-lg"
           >
-            Submit Trip Details
-          </button>
+            {({ isPending }) => (
+              <>
+                {isPending ? <Spinner color="current" size="sm" /> : null}
+                {isPending ? "Submitting..." : "Submit Trip Details"}
+              </>
+            )}
+          </Button>
         </div>
 
         {/* Hero Image */}

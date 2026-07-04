@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import nodemailer from "nodemailer";
+import { sendEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -43,18 +43,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT),
-      secure: true, // true for 465
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
     /* 1️⃣ Send to YOU */
-    await transporter.sendMail({
+    await sendEmail({
       from: `"London Minibus Rental" <info@londonminibusrental.co.uk>`,
       to: "info@londonminibusrental.co.uk",
       replyTo: email,
@@ -227,7 +217,7 @@ export async function POST(req: Request) {
     });
 
     /* 2️⃣ Auto-reply to customer */
-    await transporter.sendMail({
+    await sendEmail({
       from: `"London Minibus Rental" <info@londonminibusrental.co.uk>`,
       to: email,
       subject: "We've received your message",

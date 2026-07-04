@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import nodemailer from "nodemailer";
-;
+import { sendEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -29,18 +28,8 @@ export async function POST(req: Request) {
       luggage,
     } = data;
 
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT),
-      secure: true, // true for 465
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
     /* ---------------- COMPANY EMAIL ---------------- */
-    await transporter.sendMail({
+    await sendEmail({
       from: `"Website Quote" <info@londonminibusrental.co.uk>`,
       to: "info@londonminibusrental.co.uk",
       replyTo: email,
@@ -342,12 +331,11 @@ export async function POST(req: Request) {
     });
 
     /* ---------------- CUSTOMER AUTO-REPLY ---------------- */
-    transporter
-      .sendMail({
-        from: `"London Minibus Rental" <info@londonminibusrental.co.uk>`,
-        to: email,
-        subject: "We've received your message",
-        html: `
+    sendEmail({
+      from: `"London Minibus Rental" <info@londonminibusrental.co.uk>`,
+      to: email,
+      subject: "We've received your message",
+      html: `
         <!doctype html>
 <html lang="en">
   <head>
@@ -579,10 +567,9 @@ export async function POST(req: Request) {
   </body>
 </html>
         `,
-      })
-      .catch((err) => {
-        console.error("Auto-reply failed:", err);
-      });
+    }).catch((err) => {
+      console.error("Auto-reply failed:", err);
+    });
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
