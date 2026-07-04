@@ -1,4 +1,4 @@
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 
 type SendEmailOptions = {
   from: string;
@@ -8,18 +8,43 @@ type SendEmailOptions = {
   replyTo?: string;
 };
 
-let resend: Resend | null = null;
-const fallbackResendSender = "London Minibus Rental <onboarding@resend.dev>";
+let transporter: nodemailer.Transporter | null = null;
 
-function getResendClient() {
-  const apiKey = process.env.RESEND_QUOTE_API_KEY || process.env.RESEND_API_KEY;
+function getEnv(...keys: string[]) {
+  return keys.map((key) => process.env[key]).find(Boolean);
+}
 
-  if (!apiKey) {
-    throw new Error("Missing Resend API key");
+function getSmtpTransporter() {
+  const user = getEnv("SMTP_USER", "EMAIL_SERVER_USER", "MAIL_USER");
+  const host = getEnv("SMTP_HOST", "EMAIL_SERVER_HOST", "MAIL_HOST");
+  const port = Number(
+    getEnv("SMTP_PORT", "EMAIL_SERVER_PORT", "MAIL_PORT") ?? 587,
+  );
+  const pass = getEnv(
+    "SMTP_PASS",
+    "SMTP_PASSWORD",
+    "EMAIL_SERVER_PASSWORD",
+    "MAIL_PASS",
+  );
+  const secure =
+    getEnv("SMTP_SECURE", "EMAIL_SERVER_SECURE", "MAIL_SECURE") === "true" ||
+    port === 465;
+
+  if (!host || !user || !pass) {
+    throw new Error("Missing SMTP configuration");
   }
 
-  resend ??= new Resend(apiKey);
-  return resend;
+  transporter ??= nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: {
+      user,
+      pass,
+    },
+  });
+
+  return transporter;
 }
 
 export async function sendEmail({
@@ -29,21 +54,15 @@ export async function sendEmail({
   html,
   replyTo,
 }: SendEmailOptions) {
-  const sender = process.env.RESEND_FROM_EMAIL || fallbackResendSender;
+  const sender = getEnv("SMTP_FROM", "EMAIL_FROM", "MAIL_FROM") || from;
 
-  const { data, error } = await getResendClient().emails.send({
+  return getSmtpTransporter().sendMail({
     from: sender,
     to,
     subject,
     html,
-    replyTo: replyTo || extractEmailAddress(from),
+    replyTo: replyTo || extractEmailAddress(sender),
   });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data;
 }
 
 function extractEmailAddress(value: string) {

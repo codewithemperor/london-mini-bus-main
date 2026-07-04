@@ -1,21 +1,28 @@
 "use client";
 
-import type { TimeValue } from "@heroui/react";
-
 import {
   Calendar,
   DateField,
   DatePicker,
   InputGroup,
-  I18nProvider,
   Label,
-  TimeField,
 } from "@heroui/react";
-import { parseDate, parseZonedDateTime } from "@internationalized/date";
+import { MobileDateTimePicker } from "@mui/x-date-pickers/MobileDateTimePicker";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { parseDate } from "@internationalized/date";
+import dayjs, { type Dayjs } from "dayjs";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
 import { CheckCircle, CircleAlert } from "lucide-react";
 import React from "react";
 
 type FieldTone = "light" | "white";
+
+const UK_TIME_ZONE = "Europe/London";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const fieldShell =
   "focus-within:border-secondary-600 mt-2 flex h-14 min-h-14 items-center gap-3 rounded-xl border px-4 py-0 shadow-sm transition hover:shadow-md";
@@ -46,35 +53,29 @@ function parseISODate(value: string) {
 function parseGMTDateTime(dateValue: string, timeValue: string) {
   if (!dateValue || !timeValue) return null;
 
-  try {
-    return parseZonedDateTime(`${dateValue}T${timeValue}:00[UTC]`);
-  } catch {
-    return null;
-  }
+  const parsed = dayjs.tz(`${dateValue}T${timeValue}`, UK_TIME_ZONE);
+  return parsed.isValid() ? parsed : null;
 }
 
-function formatPart(value: number) {
-  return String(value).padStart(2, "0");
-}
-
-function getDateTimeParts(value: unknown) {
-  const dateValue = value as {
-    year?: number;
-    month?: number;
-    day?: number;
-    hour?: number;
-  };
-
-  if (!dateValue.year || !dateValue.month || !dateValue.day) {
+function getDateTimeParts(value: Dayjs | null) {
+  if (!value?.isValid()) {
     return { date: "", time: "" };
   }
 
   return {
-    date: `${dateValue.year}-${formatPart(dateValue.month)}-${formatPart(
-      dateValue.day,
-    )}`,
-    time: `${formatPart(dateValue.hour ?? 0)}:00`,
+    date: value.format("YYYY-MM-DD"),
+    time: value.format("HH:mm"),
   };
+}
+
+function isSameDate(value: Dayjs | null, comparison: Dayjs | null) {
+  return Boolean(
+    value &&
+      comparison &&
+      value.year() === comparison.year() &&
+      value.month() === comparison.month() &&
+      value.date() === comparison.date(),
+  );
 }
 
 function FieldMessage({ error, valid }: { error?: string; valid?: boolean }) {
@@ -249,90 +250,109 @@ export function HeroDateTimePickerField({
   const parsedMinValue = minDateTime
     ? parseGMTDateTime(minDateTime.date, minDateTime.time)
     : null;
+  const [pendingValue, setPendingValue] = React.useState<Dayjs | null>(
+    parsedValue,
+  );
+
+  React.useEffect(() => {
+    setPendingValue(parseGMTDateTime(value, timeValue));
+  }, [timeValue, value]);
+
+  const pickerValue = pendingValue ?? parsedValue;
+  const selectedDate = pickerValue ?? parsedValue;
 
   return (
     <div className="space-y-1 font-medium text-neutral-700">
-      <I18nProvider locale="en-GB">
-        <DatePicker
-          value={parsedValue}
-          minValue={parsedMinValue ?? undefined}
-          granularity="hour"
-          hideTimeZone={false}
-          hourCycle={12}
-          onChange={(date) => onChange(getDateTimeParts(date))}
-          className="w-full"
-        >
-          {({ state }) => (
-            <>
-              <Label>{label}</Label>
-              <DateField.Group
-                fullWidth
-                variant="secondary"
-                className={`${fieldShell} ${fieldToneClass(
-                  tone,
-                )} ${fieldBorderClass(error, valid)}`}
-              >
-                <DateField.Input className="flex min-w-0 flex-1 items-center gap-0.5 font-semibold text-black">
-                  {(segment) => <DateField.Segment segment={segment} />}
-                </DateField.Input>
-                <DateField.Suffix>
-                  <DatePicker.Trigger className="text-slate-500 outline-none">
-                    <DatePicker.TriggerIndicator />
-                  </DatePicker.Trigger>
-                </DateField.Suffix>
-              </DateField.Group>
-              <DatePicker.Popover className="flex flex-col gap-3">
-                <Calendar aria-label={label}>
-                  <Calendar.Header>
-                    <Calendar.YearPickerTrigger>
-                      <Calendar.YearPickerTriggerHeading />
-                      <Calendar.YearPickerTriggerIndicator />
-                    </Calendar.YearPickerTrigger>
-                    <Calendar.NavButton slot="previous" />
-                    <Calendar.NavButton slot="next" />
-                  </Calendar.Header>
-                  <Calendar.Grid>
-                    <Calendar.GridHeader>
-                      {(day) => (
-                        <Calendar.HeaderCell>{day}</Calendar.HeaderCell>
-                      )}
-                    </Calendar.GridHeader>
-                    <Calendar.GridBody>
-                      {(date) => <Calendar.Cell date={date} />}
-                    </Calendar.GridBody>
-                  </Calendar.Grid>
-                  <Calendar.YearPickerGrid>
-                    <Calendar.YearPickerGridBody>
-                      {({ year }) => <Calendar.YearPickerCell year={year} />}
-                    </Calendar.YearPickerGridBody>
-                  </Calendar.YearPickerGrid>
-                </Calendar>
-                <div className="flex items-center justify-between gap-4 border-t border-slate-100 pt-3">
-                  <Label>Time (GMT)</Label>
-                  <TimeField
-                    aria-label={`${label} time`}
-                    granularity="hour"
-                    hideTimeZone={false}
-                    hourCycle={12}
-                    value={state.timeValue}
-                    onChange={(nextTime) => {
-                      if (nextTime) {
-                        state.setTimeValue(nextTime as TimeValue);
-                      }
-                    }}
-                  >
-                    <TimeField.Group variant="secondary">
-                      <TimeField.Input>
-                        {(segment) => <TimeField.Segment segment={segment} />}
-                      </TimeField.Input>
-                    </TimeField.Group>
-                  </TimeField>
-                </div>
-              </DatePicker.Popover>
-            </>
-          )}
-        </DatePicker>
-      </I18nProvider>
+      <label className="block">{label}</label>
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <MobileDateTimePicker
+          value={pickerValue}
+          timezone={UK_TIME_ZONE}
+          openTo="day"
+          minDate={parsedMinValue?.startOf("day") ?? undefined}
+          skipDisabled
+          shouldDisableTime={(time, view) => {
+            if (!isSameDate(selectedDate, parsedMinValue)) return false;
+
+            if (view === "hours") {
+              return time.hour() < parsedMinValue!.hour();
+            }
+
+            if (
+              view === "minutes" &&
+              selectedDate?.hour() === parsedMinValue!.hour()
+            ) {
+              return time.minute() < parsedMinValue!.minute();
+            }
+
+            return false;
+          }}
+          onOpen={() => {
+            setPendingValue(parsedValue);
+          }}
+          onChange={(nextValue) => setPendingValue(nextValue)}
+          onAccept={(nextValue) => {
+            setPendingValue(nextValue);
+            onChange(getDateTimeParts(nextValue));
+          }}
+          minutesStep={15}
+          format="DD/MM/YYYY hh:mm A"
+          slotProps={{
+            textField: {
+              fullWidth: true,
+              error: Boolean(error),
+              variant: "standard",
+              hiddenLabel: true,
+              sx: {
+                "& .MuiPickersInputBase-root": {
+                  paddingLeft: "1rem",
+                  paddingRight: "1rem",
+                },
+                "& .MuiPickersInputBase-root::before, & .MuiPickersInputBase-root::after":
+                  {
+                    display: "none",
+                  },
+                "& .MuiPickersInputBase-root:hover:not(.Mui-disabled)::before":
+                  {
+                    borderBottom: 0,
+                  },
+                "& .MuiPickersSectionList-root": {
+                  padding: 0,
+                },
+                "& input": {
+                  padding: 0,
+                },
+                "& label": {
+                  display: "none",
+                },
+              },
+              slotProps: {
+                input: {
+                  className: `${fieldShell.replace("mt-2 ", "")} ${fieldToneClass(
+                    tone,
+                  )} ${fieldBorderClass(error, valid)}`,
+                },
+                htmlInput: {
+                  className: `${inputClass} cursor-pointer`,
+                },
+                inputLabel: {
+                  shrink: true,
+                  className: "font-medium text-neutral-700",
+                },
+              },
+            },
+            mobilePaper: {
+              "aria-label": label,
+            },
+            actionBar: {
+              actions: ["cancel", "nextOrAccept"],
+            },
+            openPickerButton: {
+              className: "text-slate-500",
+            },
+          }}
+        />
+      </LocalizationProvider>
       <FieldMessage error={error} valid={valid} />
     </div>
   );
