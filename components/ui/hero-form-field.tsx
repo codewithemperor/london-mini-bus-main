@@ -273,12 +273,7 @@ export function HeroDateTimePickerField({
                 )} ${fieldBorderClass(error, valid)}`}
               >
                 <DateField.Input className="flex min-w-0 flex-1 items-center gap-0.5 font-semibold text-black">
-                  {(segment) => (
-                    <DateField.Segment
-                      segment={segment}
-                      suppressHydrationWarning
-                    />
-                  )}
+                  {(segment) => <DateField.Segment segment={segment} />}
                 </DateField.Input>
                 <DateField.Suffix>
                   <DatePicker.Trigger className="text-slate-500 outline-none">
