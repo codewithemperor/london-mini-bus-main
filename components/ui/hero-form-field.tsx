@@ -310,6 +310,12 @@ export function HeroDateTimePickerField({
           minutesStep={15}
           format="DD/MM/YYYY hh:mm A"
           slotProps={{
+            toolbar: {
+              hidden: true,
+            },
+            tabs: {
+              hidden: true,
+            },
             textField: {
               fullWidth: true,
               error: Boolean(error),
@@ -357,10 +363,10 @@ export function HeroDateTimePickerField({
               "aria-label": label,
             },
             dialog: {
-              // Force the user to click Cancel or Next/Accept
-              disableEscapeKeyDown: true,
+              // Force the user to click Cancel or Next/Accept by ignoring
+              // backdrop clicks and escape key presses
               onClose: (_event: unknown, reason: string) => {
-                if (reason === "backdropClick") return; // Swallow backdrop clicks
+                if (reason === "backdropClick" || reason === "escapeKeyDown") return;
               },
             },
             actionBar: {
